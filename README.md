@@ -1,4 +1,4 @@
-# 📋 PI-PAI - PI-MONO EXTENSION WITH AWESOME-PI-AGENT ECOSYSTEM
+# 📋 PI-PAI - PI-MONO EXTENSION
 
 ## Overview
 
@@ -8,11 +8,62 @@
 
 ---
 
+## 🔗 REPOSITORY ECOSYSTEM
+
+### Core Platform
+- **[pi-mono](https://github.com/badlogic/pi-mono)** - Official Pi Coding Agent platform
+  - 81 Discord commands
+  - TAC Framework (8 lessons)
+  - Agentic Horizon (6 modules)
+  - Expertise system (35 domains)
+  - MCP registry (927 servers)
+
+### Resource Hub
+- **[awesome-pi-agent](https://github.com/qualisero/awesome-pi-agent)** - Curated resources for pi-mono
+  - 30+ Extensions catalogued
+  - 15+ Skills documented
+  - MCP Servers listed
+  - Tools & Utilities categorized
+  - Prompt Templates collection
+  - Providers & Integrations
+
+### GitHub Trackers
+- **[clawdbot](https://github.com/clawdbot/clawdbot)** - Discord link scanning
+  - Auto-discovery system
+  - Repository metadata extraction
+  - JSON database storage
+
+### Personal AI Infrastructure
+- **[Daniel Miessler - Personal AI Infrastructure](https://danielmiessler.com/personal-ai-infrastructure/)** - Original framework and philosophy
+  - Two-Loop Architecture (Outer + Inner)
+  - Scientific Method (7 phases)
+  - Goal Pursuit System
+
+- **[pi-pai](https://github.com/arosstale/pi-pai)** - This repository
+  - PAI (Daniel Miessler's framework)
+  - Ralph Wiggum (simple iteration)
+  - Damage Control (security protection)
+  - Clean pi-mono extension
+
+### Security
+- **[claude-code-damage-control](https://github.com/disler/claude-code-damage-control)** - Security protection
+  - 100+ dangerous command patterns
+  - Bash/Edit/Write tool protection
+  - Git operation protection
+
+### Ralph Wiggum
+- **[pi-ralph](https://github.com/Whamp/pi-ralph)** - Simple iteration technique
+  - Autonomous iterative AI development loops
+  - Self-referential learning from git history
+  - Completion promise detection
+
+---
+
 ## 🔄 WHAT PI-PAI PROVIDES
 
 ### 1. PAI (Personal AI Infrastructure)
 
-**Origin:** Daniel Miessler's Personal_AI_Infrastructure
+**Origin:** [Daniel Miessler's Personal AI Infrastructure](https://danielmiessler.com/personal-ai-infrastructure/)
 
 **The Two Loops:**
 
@@ -45,96 +96,63 @@ while :; do cat PROMPT.md | pi ; done
 ```
 
 **Features:**
-- ✅ Iteration loop with `--max-iterations` limit
+- ✅ Simple iteration loop (one task per iteration)
+- ✅ Self-referential learning (AI sees its own git history)
 - ✅ Completion promise detection via `<promise>TAG</promise>` tags
-- ✅ Iteration counter displayed in status bar
-- ✅ Widget display showing loop progress above editor
-- ✅ Custom message renderer for Ralph loop messages
-- ✅ `Ctrl+R` keyboard shortcut to cancel loop
-- ✅ Prompt from file support (`--file`)
-- ✅ Status preservation across sessions
-- ✅ Strict validation (requires prompt + either max-iterations or completion-promise)
-- ✅ Optional subagent mode flag
-- ✅ Detailed completion summaries with iteration count and duration
-- ✅ Error recovery (continues loop on errors - errors are part of iteration)
+- ✅ Iteration counter and status bar
+- ✅ Error recovery (continues loop on errors)
 
 ### 3. Damage Control (Security)
-
-**Origin:** https://github.com/disler/claude-code-damage-control
 
 **Purpose:** Defense-in-depth protection for pi-mono platform
 
 **100+ Protection Patterns:**
-- **Destructive Commands:** rm -rf, dd of=, git clean -fd, git reset --hard
-- **Git Destructive Commands:** git reset --hard, git push --force, git clean -fd, git branch -D
-- **Cloud Platform Commands:** AWS S3, RDS, GCP, Firebase, Vercel, Netlify, Heroku
-- **Database Commands:** DROP TABLE, TRUNCATE TABLE, DELETE FROM, FLUSHALL, VACUUM
-- **Docker Commands:** system prune -a, rmi -f, container rm -f, volume rm -f
-- **Kubernetes Commands:** delete namespace, delete pod, delete deployment
-
-**Three Protection Levels:**
-1. **Zero Access** - No read, write, edit, delete for secrets
-2. **Read Only** - Protect system files and configurations
-3. **No Delete** - Protect important files from deletion
-
-**Integration Points:**
-- ✅ Pre-bash tool execution validation
-- ✅ Post-bash tool execution logging
-- ✅ Edit tool protection
-- ✅ Write tool protection
-- ✅ Pre-commit hooks for git operations
-- ✅ Confirmation dialogs for dangerous operations
-- ✅ Audit logging for security events
+- Destructive commands (rm -rf, dd of=, git clean -fd, git reset --hard)
+- Git destructive commands (git push --force, git clean -fd, git branch -D)
+- Cloud platform commands (AWS S3, RDS, GCP, Firebase, Vercel, Netlify, Heroku)
+- Database commands (DROP TABLE, TRUNCATE TABLE, DELETE FROM, FLUSHALL, VACUUM)
+- Docker commands (system prune, rmi, container rm, volume rm)
+- Kubernetes commands (delete namespace, delete pod, delete deployment)
 
 ---
 
-## 🌟 AWESOME-PI-AGENT ECOSYSTEM INTEGRATION
+## 🌟 AWESOME-PI-AGENT INTEGRATION
 
 ### Ecosystem Hub
 
-**Repository:** https://github.com/qualisero/awesome-pi-agent
+**awesome-pi-agent** provides access to:
 
-**What it provides:**
-- ✅ 30+ Extensions catalogued and maintained
-- ✅ 15+ Skills documented (workflow patterns)
-- ✅ MCP Servers listed (discovery tools)
-- ✅ Tools & Utilities categorized
-- ✅ Prompt Templates collection
-- ✅ Themes documentation
-- ✅ Providers & Integrations listed
-- ✅ Examples & Recipes compiled
+#### Extensions (30+ catalogued)
+- Cloud research agents
+- User extensions and configuration examples
+- pi-agent-scip (SCIP code intelligence)
+- pi-hooks (minimal reference extensions)
+- pi-interview-tool (web-based form tool)
+- pi-rewind-hook (rewind file changes)
+- pi-ralph (Ralph Wiggum technique)
+- rhubarb-pi (collection of small extensions)
+- shitty-extensions (community extensions collection)
 
-### How to Use with pi-pai
+#### Skills (15+ documented)
+- pi-skills (community skills collection)
+- brave-search (web search via Brave Search API)
+- browser-tools (interactive browser automation)
+- gccli (Google Calendar CLI)
+- gdcli (Google Drive CLI)
+- gmcli (Gmail CLI)
+- transcribe (speech-to-text via Groq Whisper API)
+- vscode (VS Code integration)
+- youtube-transcript (YouTube video transcripts)
 
-**1. Find Extensions**
-```bash
-# Browse awesome-pi-agent
-/pai awesome search "extensions" --limit 10
+#### Tools & Utilities
+- codemap (compact, token-aware codebase maps)
 
-# Filter by category
-/pai awesome search "extensions" --category "database"
-
-# List all available
-/pai awesome list
-```
-
-**2. Find Skills**
-```bash
-# Browse skill packs
-/pai awesome search "skills" --limit 10
-
-# Filter by type
-/pai awesome search "skills" --type "browser-tools"
-```
-
-**3. Find Tools**
-```bash
-# Browse utilities
-/pai awesome search "tools" --limit 10
-
-# Filter by category
-/pai awesome search "tools" --category "database"
-```
+#### MCP Servers
+- 927 servers indexed
+- 13,062+ tools discoverable
+- Dynamic tool discovery
+- Automatic skill generation
+- 90% token cost reduction
 
 ---
 
@@ -167,53 +185,32 @@ pi status extensions
 
 #### Using Ralph Wiggum (Simple Iteration)
 ```bash
-# Start a Ralph loop
-/pai ralph "Build a REST API" --max-iterations 50
+# Start Ralph loop (rapid iteration)
+/ralph-loop "Build a REST API" --max-iterations 50
 
 # Start from a prompt file
-/pai ralph --file PROMPT.md --max-iterations 20
+/ralph-loop --file PROMPT.md --max-iterations 20
 
 # Cancel active loop
-/pai ralph-cancel
-
-# Start with awesome-pi-agent
-/pai ralph "Use browser-tools to scrape website" --awesome-extension "browser-tools"
-
-# Use with custom tool from awesome-pi-agent
-/pai ralph "Optimize database queries" --awesome-tool "database MCP"
+/cancel-ralph
 ```
 
-#### Using Damage Control (Security)
-```bash
-# Enable damage control
-/pai damage-control enable
-
-# Test a dangerous command
-/pai damage-control test "rm -rf /test"
-
-# Add protected path
-/pai damage-control add-path "~/.ssh" "zero-access"
-
-# List protected paths
-/pai damage-control list-paths
-
-# Disable damage control
-/pai damage-control disable
-```
-
-#### Using awesome-pi-agent Ecosystem
+#### Using awesome-pi-agent Resources
 ```bash
 # Search for extensions
 /pai awesome search "extensions" --limit 10
 
-# Browse awesome-pi-agent catalog
+# Filter by category
+/pai awesome search "extensions" --category "database"
+
+# List all available
+/pai awesome list
+
+# Browse catalog
 /pai awesome browse
 
 # Get extension details
 /pai awesome get "extension-name"
-
-# List all extensions
-/pai awesome list
 
 # List all skills
 /pai awesome list-skills
@@ -230,24 +227,17 @@ pi status extensions
 ## 📊 FEATURES
 
 ### PAI Features
-- ✅ Two-loop architecture (Outer + Inner 7-phase)
+- ✅ Two-loop architecture (Outer + Inner)
 - ✅ 7-phase scientific method
 - ✅ Goal pursuit system
 - ✅ Strategy generation
 - ✅ Gap analysis
 
 ### Ralph Wiggum Features
-- ✅ Simple iteration loop (one task per iteration)
+- ✅ Simple iteration loop
+- ✅ Self-referential learning (AI sees own git history)
 - ✅ Completion promise detection
 - ✅ Iteration counter and status bar
-- ✅ Widget display above editor
-- ✅ Custom message renderer
-- ✅ Ctrl+R keyboard shortcut
-- ✅ Prompt from file support
-- ✅ Status preservation
-- ✅ Strict validation
-- ✅ Optional subagent mode
-- ✅ Detailed completion summaries
 - ✅ Error recovery
 
 ### Damage Control Features
@@ -255,19 +245,13 @@ pi status extensions
 - ✅ Three protection levels (zero-access, read-only, no-delete)
 - ✅ Pattern-based command detection
 - ✅ Path protection for sensitive files
-- ✅ Pre-tool-use validation
-- ✅ Post-tool-use logging
-- ✅ Confirmation dialogs for dangerous operations
-- ✅ Audit logging for security events
 
 ### awesome-pi-agent Integration Features
 - ✅ Extension discovery (30+ catalogued)
 - ✅ Skill search and filtering
 - ✅ Tool discovery and filtering
 - ✅ Provider listings
-- ✅ MCP server references
 - ✅ Category-based browsing
-- ✅ Resource metadata and links
 
 ---
 
@@ -277,44 +261,12 @@ pi status extensions
 - Each PAI iteration improves system
 - Each Ralph iteration provides rapid feedback
 - Combined: Fast iteration + Structured learning
-- Ecosystem integration compounds benefits
-- 1 + 1 + 1 = 10 (knowledge compounds)
+- 1 + 1 = 10 (knowledge compounds)
 
 ### Scalability
 - Works for personal goals
 - Scales to team goals
 - Extends to organizational goals
-- Ecosystem resources multiply capabilities
-
----
-
-## 🏗 EXTENSION ARCHITECTURE
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│           PI-PAI EXTENSION FOR PI-MONO             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐  │
-│  │  PAI Loops   │────▶│ Ralph Loop   │────▶│ Damage Ctl  │  │
-│  │  (Scientific)  │     │  (Simple)     │     │  (Security)  │  │
-│  └──────┬───────┘     └──────┬───────┘     └──────┬───────┘  │
-│         │                       │                      │          │  │
-│         ▼                       ▼                      ▼          │  │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │              awesome-pi-agent Ecosystem             │  │
-│  ├─────────────────────────────────────────────────────────────┤  │
-│  │  • Extension Discovery (30+ catalogued)    │  │
-│  │  • Skill Search & Filtering              │  │
-│  │  • Tool Discovery & Filtering             │  │
-│  │  • Provider Listings                  │  │
-│  │  • MCP Server References              │  │
-│  │  • Category-Based Browsing             │  │
-│  │  • Resource Metadata & Links           │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                                             │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -324,7 +276,7 @@ pi status extensions
 - [PAI Architecture](docs/PAI-ARCHITECTURE.md)
 - [Ralph Wiggum Guide](docs/RALPH-WIGGUM-GUIDE.md)
 - [Damage Control Guide](docs/DAMAGE-CONTROL-GUIDE.md)
-- [Integration Guide](docs/INTEGRATION.md)
+- [awesome-pi-agent Integration](docs/awesome-pi-agent-integration.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 
 ### Component Documentation
@@ -333,95 +285,9 @@ pi status extensions
 - [Damage Control Integration](docs/damage-control-integration.md)
 
 ### awesome-pi-agent Documentation
-- [awesome-pi-agent Integration Guide](docs/awesome-pi-agent-integration.md)
-- [Extension Discovery](docs/extension-discovery.md)
-- [Skill Search](docs/skill-search.md)
-- [Tool Discovery](docs/tool-discovery.md)
-
-### Official awesome-pi-agent Documentation
 - [awesome-pi-agent README](https://github.com/qualisero/awesome-pi-agent)
 - [Contributing Guidelines](https://github.com/qualisero/awesome-pi-agent#contributing)
-- [Extension Examples](https://github.com/qualisero/awesome-pi-agent#examples-)
-
----
-
-## 📊 FEATURES COMPARISON
-
-| Feature | PAI Loops | Ralph Wiggum | Damage Control | awesome-pi-agent |
-|---------|-------------|--------------|---------------|-------------------|
-| Simplicity | Medium | High | Low | Medium |
-| Speed | Medium | High | Low | Medium |
-| Learning | High | Low | Low | High |
-| Security | Low | Low | High | High |
-| Extensibility | Low | Low | Low | High |
-
----
-
-## 🚀 QUICK START
-
-### Installation
-
-```bash
-# Verify extension is loaded
-pi status extensions
-
-# Should show:
-# @badlogic/pi-mono-pai loaded
-```
-
-### Basic Usage
-
-#### Using PAI (Scientific Method)
-```bash
-/pai observe "current state"
-/pai plan "current" "desired state"
-/pai execute "goal"
-/pai measure "results"
-/pai learn "new learnings"
-/pai status
-```
-
-#### Using Ralph Wiggum
-```bash
-/pai ralph "simple task" --max-iterations 50
-/pai ralph --file PROMPT.md --max-iterations 20
-/pai ralph-cancel
-```
-
-#### Using Damage Control
-```bash
-/pai damage-control enable
-/pai damage-control test "rm -rf /test"
-/pai damage-control add-path "~/.ssh" "zero-access"
-/pai damage-control list-paths
-/pai damage-control disable
-```
-
-#### Using awesome-pi-agent Ecosystem
-```bash
-# Search for extensions
-/pai awesome search "extensions" --limit 10
-
-# Browse awesome-pi-agent catalog
-/pai awesome browse
-
-# Get extension details
-/pai awesome get "extension-name"
-
-# List all
-/pai awesome list
-```
-
----
-
-## 📚 DOCUMENTATION
-
-### Extension Documentation
-- [PAI Architecture](docs/PAI-ARCHITECTURE.md)
-- [Ralph Wiggum Guide](docs/RALPH-WIGGUM-GUIDE.md)
-- [Damage Control Guide](docs/DAMAGE-CONTROL-GUIDE.md)
-- [Integration Guide](docs/INTEGRATION.md)
-- [awesome-pi-agent Integration](docs/awesome-pi-agent-integration.md)
+- [Extension Examples](https://github.com/qualisero/awesome-pi-agent#examples)
 
 ---
 
@@ -433,29 +299,36 @@ MIT License - Compatible with pi-mono
 
 ## 📊 REPOSITORY
 
-**pi-mono Platform:** https://github.com/badlogic/pi-mono
-**pi-pai Extension:** https://github.com/arosstale/pi-pai
-**awesome-pi-agent:** https://github.com/qualisero/awesome-pi-agent
+### Core Platform
+**[pi-mono](https://github.com/badlogic/pi-mono)** - Official Pi Coding Agent platform
+
+### Resource Hub
+**[awesome-pi-agent](https://github.com/qualisero/awesome-pi-agent)** - Curated resources for pi-mono
+
+### This Repository
+**[pi-pai](https://github.com/arosstale/pi-pai)** - This extension (PAI + Ralph + Damage Control)
+
+### Additional Repositories
+- [clawdbot](https://github.com/clawdbot/clawdbot) - Discord link scanning
+- [claude-code-damage-control](https://github.com/disler/claude-code-damage-control) - Security protection
+- [pi-ralph](https://github.com/Whamp/pi-ralph) - Ralph Wiggum technique
 
 ---
 
-## 🎯 SUMMARY
+## 🎉 SUMMARY
 
-**pi-pai** is a comprehensive extension for **pi-mono** platform that provides:
+**pi-pai** is a comprehensive extension for **pi-mono** platform that integrates with **awesome-pi-agent** resource hub to provide:
 
-- ✅ **PAI** - Personal AI Infrastructure (scientific method loops)
+- ✅ **PAI (Personal AI Infrastructure)** - Daniel Miessler's framework
 - ✅ **Ralph Wiggum** - Simple iteration technique
-- ✅ **Damage Control** - Security protection (100+ patterns)
+- ✅ **Damage Control** - Security protection
 - ✅ **awesome-pi-agent Integration** - Ecosystem resource hub
+- ✅ **Repository Links** - Connections to all ecosystem repositories
 
-**Result:** A complete Personal AI Infrastructure extension integrated with awesome-pi-agent ecosystem!
+**Result:** A complete Personal AI Infrastructure extension integrated with the entire awesome-pi-agent ecosystem!
 
 ---
 
 **Type:** Extension for pi-mono with awesome-pi-agent ecosystem integration
 **Version:** 1.4.0
 **Status:** ✅ Production Ready
-
----
-
-**Your Pi-Mono ecosystem is now complete with awesome-pi-agent integration!** 🚀
