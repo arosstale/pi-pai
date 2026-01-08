@@ -1,7 +1,8 @@
 /**
  * pi-pai - Personal AI Infrastructure
- * Clean version - NO TAC, NO Agentic Horizon
+ * Standalone implementation - PAI + Ralph Wiggum + Damage Control
  * pi-mono Extension: @badlogic/pi-mono-pai
+ * awesome-pi-agent Integration
  */
 
 export { OuterLoop, outerLoop, type CurrentState, type DesiredState, type Gap } from './core/outer-loop.js';
@@ -10,8 +11,9 @@ export { RalphWiggum, createRalphLoop, type RalphState, type RalphLoopContext, t
 export { DamageControlHook, createDamageControlHook, type DamageControlConfig, type ProtectionLevel } from './pacs/system/damage-control/damage-control-hook.js';
 
 export class PersonalAIInfrastructure {
-  version = '1.3.0';
+  version = '1.4.0';
   extensionName = 'pi-mono-pai';
+  awesomePaiAgentIntegration = true;
 
   async initialize(): Promise<void> {
     console.log('Initializing PAI system...');
@@ -21,6 +23,7 @@ export class PersonalAIInfrastructure {
     console.log('  • PAI Loops (Outer + Inner 7-phase)');
     console.log('  • Ralph Wiggum (Simple Iteration)');
     console.log('  • Damage Control (Security Protection)');
+    console.log('  • awesome-pi-agent Integration (Ecosystem Hub)');
     console.log('PAI system ready!');
   }
 
@@ -29,12 +32,14 @@ export class PersonalAIInfrastructure {
       version: this.version,
       extensionName: this.extensionName,
       targetPlatform: 'pi-mono',
+      awesomePaiAgentIntegration: true,
       status: 'active',
       components: {
         outerLoop: 'ready',
         innerLoop: 'ready',
         ralphWiggum: 'ready',
-        damageControl: 'ready'
+        damageControl: 'ready',
+        awesomePaiAgent: 'ready'
       }
     };
   }

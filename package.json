@@ -1,7 +1,7 @@
 {
   "name": "@badlogic/pi-mono-pai",
-  "version": "1.3.0",
-  "description": "Personal AI Infrastructure (PAI) extension for pi-mono - PAI framework, Ralph Wiggum simple iteration, and Damage Control security protection",
+  "version": "1.4.0",
+  "description": "Personal AI Infrastructure (PAI) extension for pi-mono - PAI framework, Ralph Wiggum simple iteration, Damage Control security protection, and awesome-pi-agent ecosystem integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,35 +45,28 @@
     "database-protection",
     "docker-protection",
     "kubernetes-protection",
-    "zero-access",
-    "read-only",
-    "no-delete",
-    "protection-levels",
-    "security-patterns",
-    "bash-protection",
-    "edit-protection",
-    "write-protection",
-    "path-protection",
-    "sensitive-paths"
-    "secret-protection",
-    "credential-protection",
-    "defense-in-depth",
-    "security-automation",
-    "audit-logging",
-    "violation-prevention"
-    "security-metrics",
-    "protection-enforcement",
-    "permission-dialogs",
-    "confirmation-prompts",
-    "action-logging",
-    "audit-trail",
-    "security-reporting",
+    "awesome-pi-agent",
+    "ecosystem-integration",
+    "extension-discovery",
+    "skill-discovery",
+    "tool-discovery",
+    "resource-hub",
+    "mcp-servers",
+    "awesome-list",
+    "extensions-catalog",
+    "skills-catalog",
+    "tools-catalog",
+    "providers-catalog",
+    "themes-catalog",
+    "prompt-templates",
+    "examples",
+    "recipes"
     "extension"
     "pi-mono-extension",
     "pi-agent-extension",
     "coding-agent-extension",
     "platform-extension",
-    "plugin-extension"
+    "plugin-extension",
     "goal-management-extension",
     "task-execution-extension",
     "learning-extension",
@@ -131,5 +124,9 @@
   "bugs": {
     "url": "https://github.com/badlogic/pi-mono/issues"
   },
-  "homepage": "https://github.com/badlogic/pi-mono"
+  "homepage": "https://github.com/badlogic/pi-mono",
+  "awesome-pi-agent": {
+    "repository": "https://github.com/qualisero/awesome-pi-agent",
+    "description": "Concise, curated resources for extending and integrating the pi coding agent"
+  }
 }
