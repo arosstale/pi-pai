@@ -1,27 +1,23 @@
 {
-  "name": "@mariozechner/pi-pai",
+  "name": "@arosstale/pi-pai",
   "version": "1.0.0",
-  "description": "Personal AI Infrastructure (PAI) for pi-mono ecosystem",
+  "description": "Personal AI Infrastructure (PAI) - Standalone implementation of Daniel Miessler's PAI framework",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "test": "npm run test"
+    "start": "node dist/index.js"
   },
   "keywords": [
     "pai",
     "personal-ai",
     "infrastructure",
-    "pi-mono",
-    "agent",
-    "loop"
+    "two-loop",
+    "scientific-method",
+    "goal-pursuit"
+    "learning-system"
   ],
   "author": "arosstale",
   "license": "MIT",
-  "dependencies": {},
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
-  }
+  "dependencies": {}
 }

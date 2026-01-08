@@ -1,7 +1,5 @@
 /**
  * PAI Outer Loop: Where You Are → Where You Want To Be
- * 
- * The universal pattern that applies to all goals at any scale
  */
 
 export interface CurrentState {
@@ -19,7 +17,7 @@ export interface DesiredState {
 export interface Gap {
   currentState: CurrentState;
   desiredState: DesiredState;
-  distance: number; // Calculated gap size
+  distance: number;
   priority: 'low' | 'medium' | 'high' | 'critical';
 }
 
@@ -43,8 +41,6 @@ export class OuterLoop {
    * Calculate distance between current and desired state
    */
   private calculateDistance(current: CurrentState, desired: DesiredState): number {
-    // Simple metric difference calculation
-    // In production, use more sophisticated gap analysis
     let totalDistance = 0;
     
     const allKeys = new Set([
@@ -77,12 +73,9 @@ export class OuterLoop {
   generateStrategies(gap: Gap): string[] {
     const strategies: string[] = [];
     
-    // Generate 3-5 strategies based on gap analysis
-    const { currentState, desiredState } = gap;
-    
-    strategies.push(`Direct transition: Move from "${currentState.description}" to "${desiredState.description}"`);
-    strategies.push(`Incremental approach: Break into smaller steps`);
-    strategies.push(`Parallel execution: Work on multiple metrics simultaneously`);
+    strategies.push("Direct transition strategy");
+    strategies.push("Incremental approach strategy");
+    strategies.push("Parallel execution strategy");
     
     return strategies;
   }

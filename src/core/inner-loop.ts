@@ -1,7 +1,5 @@
 /**
  * PAI Inner Loop: The Scientific Method (7 Phases)
- * 
- * Iterative cycle for making progress toward desired state
  */
 
 export type InnerLoopPhase = 
@@ -42,7 +40,7 @@ export class InnerLoop {
   }
 
   /**
-   * OBSERVE phase - Gather context and understand where you are
+   * OBSERVE phase - Gather context
    */
   observe(observations: Record<string, any>[]): void {
     this.context.observations = observations;
@@ -50,7 +48,7 @@ export class InnerLoop {
   }
 
   /**
-   * THINK phase - Generate ideas and hypotheses
+   * THINK phase - Generate ideas
    */
   think(hypotheses: string[]): void {
     this.context.hypotheses = hypotheses;
@@ -68,8 +66,8 @@ export class InnerLoop {
   /**
    * DEFINE phase - Set success criteria
    */
-  define(successCriteria: Record<string, any>): void {
-    this.context.measurements = successCriteria;
+  define(criteria: Record<string, any>): void {
+    this.context.measurements = criteria;
     this.transitionTo('EXECUTE');
   }
 
@@ -95,7 +93,7 @@ export class InnerLoop {
   learn(learnings: string[]): void {
     this.context.learnings = learnings;
     
-    // If successful, we're done. If not, loop back to OBSERVE
+    // If successful, loop is complete. If not, loop back to OBSERVE
     const successful = learnings.some(l => l.includes('success') || l.includes('achieved'));
     if (successful) {
       console.log('Goal achieved!');
@@ -110,7 +108,6 @@ export class InnerLoop {
   private transitionTo(phase: InnerLoopPhase): void {
     this.phaseHistory.push(this.context.phase);
     this.context.phase = phase;
-    console.log(`Transitioning: ${this.phaseHistory[this.phaseHistory.length - 1]} → ${phase}`);
   }
 
   /**

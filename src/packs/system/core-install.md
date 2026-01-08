@@ -99,5 +99,4 @@ journalctl -u pai-core.service -f
 
 ## Integration with pi-mono
 - Discord Bot: `/pai status`, `/pai plan` commands
-- TAC Framework: PAI loops available to all agents
 - Act-Learn-Reuse: PAI learnings stored in expertise

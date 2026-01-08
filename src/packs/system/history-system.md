@@ -80,4 +80,3 @@ pai history status
 ## Integration with pi-mono
 - Act-Learn-Reuse: History feeds learning system
 - Discord Bot: `/memory`, `/history` commands
-- TAC Framework: Context available to all agents
