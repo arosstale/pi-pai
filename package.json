@@ -60,8 +60,8 @@
     "themes-catalog",
     "prompt-templates",
     "examples",
-    "recipes"
-    "extension"
+    "recipes",
+    "extension",
     "pi-mono-extension",
     "pi-agent-extension",
     "coding-agent-extension",
