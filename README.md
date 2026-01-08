@@ -49,6 +49,144 @@
   - Bash/Edit/Write tool protection
   - Git operation protection
 
+### Hooks & Observability
+- **[claude-code-hooks-mastery](https://github.com/disler/claude-code-hooks-mastery)** - Hooks mastery for Claude Code
+  - 2,043+ stars
+  - Hook patterns and best practices
+  - Extension capabilities
+
+- **[claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability)** - Multi-agent observability
+  - 888+ stars
+  - Real-time monitoring
+  - Hook event tracking
+
+### Multi-Agent Systems
+- **[always-on-ai-assistant](https://github.com/disler/always-on-ai-assistant)** - AI assistant pattern
+  - 961+ stars
+  - Always-on AI assistant
+  - DeepSeek-V3, RealtimeSTT, Typer
+
+- **[big-3-super-agent](https://github.com/disler/big-3-super-agent)** - Multi-agent experiment
+  - 289+ stars
+  - Gemini 2.5 Computer Use
+  - OpenAI Realtime API
+  - Claude Code Multi-Agent
+
+- **[claude-code-is-programmable](https://github.com/disler/claude-code-is-programmable)** - Programmable agents
+  - 278+ stars
+  - Programmable agentic coding
+  - Scale compute with Claude Code
+
+### Agent Workflows
+- **[agentic-drop-zones](https://github.com/disler/agentic-drop-zones)** - Agentic workflows
+  - 195+ stars
+  - Drop zone patterns
+  - Agentic workflow management
+
+- **[agent-sandbox-skill](https://github.com/disler/agent-sandbox-skill)** - Execution environments
+  - 244+ stars
+  - Isolated execution
+  - Sandbox management
+
+- **[fork-repository-skill](https://github.com/disler/fork-repository-skill)** - Agent forking
+  - 93+ stars
+  - Fork agent N times
+  - Branch engineering work
+
+### MCP Integration
+- **[aider-mcp-server](https://github.com/disler/aider-mcp-server)** - Aider MCP server
+  - 285+ stars
+  - Minimal MCP server
+  - Aider integration
+
+- **[just-prompt](https://github.com/disler/just-prompt)** - Unified LLM interface
+  - Multi-provider LLM support
+  - OpenAI, Anthropic, Gemini, Groq, DeepSeek, Ollama
+
+- **[quick-data-mcp](https://github.com/disler/quick-data-mcp)** - Data analytics MCP
+  - .json and .csv analytics
+  - Prompt-focused MCP server
+
+### Benchmarking & Evaluation
+- **[benchy](https://github.com/disler/benchy)** - Benchmarking tool
+  - 444+ stars
+  - Benchmarks you can feel
+  - Performance testing
+
+- **[agentic-coding-tool-eval](https://github.com/disler/agentic-coding-tool-eval)** - Tool evaluation
+  - 32+ stars
+  - Compare agentic coding tools
+  - Simple evaluation ideas
+
+- **[elm-itv-benchmark](https://github.com/disler/elm-itv-benchmark)** - ELM benchmarking
+  - 47+ stars
+  - Efficient Language Models testing
+  - Simple, opinionated benchmark
+
+### Computer Use & Tools
+- **[anthropic-computer-use-bash-and-files](https://github.com/disler/anthropic-computer-use-bash-and-files)** - Computer use
+  - 141+ stars
+  - Bash and files integration
+  - Anthropic Computer Use
+
+- **[diffbro](https://github.com/disler/diffbro)** - AI peer review
+  - 89+ stars
+  - Your AI Peer Review Bro
+  - Code review assistance
+
+- **[pocket-pick](https://github.com/disler/pocket-pick)** - Code discovery
+  - Exact code snippets
+  - One prompt away
+  - Code snippet discovery
+
+### Agent Experiments
+- **[nano-agent](https://github.com/disler/nano-agent)** - Small scale agent
+  - MCP Server for agents
+  - Multi-provider LLM support
+  - Small scale engineering
+
+- **[single-file-agents](https://github.com/disler/single-file-agents)** - Single file agents
+  - Single purpose AI agents
+  - Pack into single Python file
+  - Powerful and compact
+
+- **[infinite-agentic-loop](https://github.com/disler/infinite-agentic-loop)** - Infinite loop experiment
+  - Two prompt system
+  - Claude Code experiment
+  - Infinite agent iteration
+
+### Beyond MCP
+- **[beyond-mcp](https://github.com/disler/beyond-mcp)** - Beyond MCP servers
+  - 122+ stars
+  - Push beyond MCP Servers
+  - Next generation agent protocols
+
+### LLM Starter Packs
+- **[claude-3-7-sonnet-starter-pack](https://github.com/disler/claude-3-7-sonnet-starter-pack)** - Claude 3.7 Sonnet
+  - 83+ stars
+  - Hybrid CRASHOUT LLM
+  - Claude 3.7 Sonnet starter
+
+---
+
+## 📊 DISLER REPOS SUMMARY
+
+**Total Repos:** 20+  
+**Total Stars:** ~7,000+  
+**Most Popular:** claude-code-hooks-mastery (2,043 ⭐)
+
+**By Category:**
+- **Security:** claude-code-damage-control (210 ⭐)
+- **Hooks & Observability:** claude-code-hooks-mastery (2,043 ⭐), claude-code-hooks-multi-agent-observability (888 ⭐)
+- **Multi-Agent Systems:** always-on-ai-assistant (961 ⭐), big-3-super-agent (289 ⭐), claude-code-is-programmable (278 ⭐)
+- **Agent Workflows:** agentic-drop-zones (195 ⭐), agent-sandbox-skill (244 ⭐), fork-repository-skill (93 ⭐)
+- **MCP Integration:** aider-mcp-server (285 ⭐), just-prompt, quick-data-mcp
+- **Benchmarking:** benchy (444 ⭐), agentic-coding-tool-eval (32 ⭐), elm-itv-benchmark (47 ⭐)
+- **Computer Use:** anthropic-computer-use-bash-and-files (141 ⭐), diffbro (89 ⭐), pocket-pick
+- **Agent Experiments:** nano-agent, single-file-agents, infinite-agentic-loop
+- **Beyond MCP:** beyond-mcp (122 ⭐)
+- **LLM Starter Packs:** claude-3-7-sonnet-starter-pack (83 ⭐)
+
 ### Ralph Wiggum
 - **[pi-ralph](https://github.com/Whamp/pi-ralph)** - Simple iteration technique
   - Autonomous iterative AI development loops
