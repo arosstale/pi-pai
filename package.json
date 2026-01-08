@@ -132,5 +132,12 @@
   "awesome-pi-agent": {
     "repository": "https://github.com/qualisero/awesome-pi-agent",
     "description": "Concise, curated resources for extending and integrating the pi coding agent"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.38.0"
   }
 }

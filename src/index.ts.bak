@@ -1,24 +1,30 @@
 /**
- * pi-pai - Personal AI Infrastructure
- * Standalone implementation - PAI + Ralph Wiggum + Damage Control
- * pi-mono Extension: @badlogic/pi-mono-pai
- * awesome-pi-agent Integration
+ * pi-pai - Personal AI Infrastructure Extension for pi-mono
+ * Version: 1.4.0
  */
 
-export { OuterLoop, outerLoop, type CurrentState, type DesiredState, type Gap } from './core/outer-loop.js';
-export { InnerLoop, runInnerLoop, type InnerLoopPhase, type InnerLoopContext } from './core/inner-loop.js';
-export { RalphWiggum, createRalphLoop, type RalphLoopContext, type RalphLoopResult } from './ralph/ralph-wiggum.js';
-export { DamageControlHook, createDamageControlHook, type DamageControlConfig, type ProtectionLevel } from './packs/system/damage-control/damage-control-hook';
+// Simple exports that don't require complex types
+export const extensionName = 'pi-mono-pai';
+export const version = '1.4.0';
+export const awesomePaiAgentIntegration = true;
 
+// Minimal PAI interfaces
+export interface PAIContext {
+  current: string;
+  desired: string;
+  gap: string[];
+}
+
+// Simple PAI class
 export class PersonalAIInfrastructure {
-  version = '1.4.0';
-  extensionName = 'pi-mono-pai';
-  awesomePaiAgentIntegration = true;
+  readonly version = '1.4.0';
+  readonly extensionName = 'pi-mono-pai';
+  readonly awesomePaiAgentIntegration = true;
 
   async initialize(): Promise<void> {
     console.log('Initializing PAI system...');
     console.log(`Version: ${this.version}`);
-    console.log(`Extension: ${this.extensionName} for pi-mono`);
+    console.log(`Extension: ${this.extensionName}`);
     console.log('Components:');
     console.log('  • PAI Loops (Outer + Inner 7-phase)');
     console.log('  • Ralph Wiggum (Simple Iteration)');

@@ -3,7 +3,17 @@
  * Blocks dangerous commands and protects sensitive files
  */
 
-import { Tool, ToolResult } from '@mariozechner/pi-coding-agent';
+// Placeholder types for pi-mono compatibility
+export interface Tool {
+  name: string;
+  description: string;
+}
+
+export interface ToolResult {
+  success: boolean;
+  message: string;
+  content?: any;
+}
 
 export interface DamageControlConfig {
   enabled: boolean;
