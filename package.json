@@ -1,5 +1,5 @@
 {
-  "name": "@badlogic/pi-mono-pai",
+  "name": "@arosstale/pi-pai",
   "version": "1.4.0",
   "description": "Personal AI Infrastructure (PAI) extension for pi-mono - PAI framework, Ralph Wiggum simple iteration, Damage Control security protection, and awesome-pi-agent ecosystem integration",
   "type": "module",
@@ -115,16 +115,20 @@
     "extension-usage-review",
     "extension-usage-analysis"
   ],
-  "author": "badlogic",
+  "author": "pi-agent",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/badlogic/pi-mono"
+    "url": "https://github.com/arosstale/pi-pai.git"
   },
   "bugs": {
-    "url": "https://github.com/badlogic/pi-mono/issues"
+    "url": "https://github.com/arosstale/pi-pai/issues"
   },
-  "homepage": "https://github.com/badlogic/pi-mono",
+  "homepage": "https://github.com/arosstale/pi-pai#readme",
+  "pi-mono": {
+    "repository": "https://github.com/badlogic/pi-mono",
+    "description": "Official Pi Coding Agent platform"
+  },
   "awesome-pi-agent": {
     "repository": "https://github.com/qualisero/awesome-pi-agent",
     "description": "Concise, curated resources for extending and integrating the pi coding agent"
