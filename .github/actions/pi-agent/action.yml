@@ -1,5 +1,5 @@
 name: "Pi Agent Action"
-description: "AI-powered GitHub automation using pi-coding-agent. Responds to @pi mentions, reviews PRs, triages issues, and executes custom prompts."
+description: "AI-powered GitHub automation using ZAI API directly. Responds to @pi mentions, reviews PRs, and triages issues."
 author: "pi-mono"
 
 branding:
@@ -7,163 +7,54 @@ branding:
   color: "purple"
 
 inputs:
-  # Authentication
-  openrouter_api_key:
-    description: "OpenRouter API key for model access"
-    required: false
-  anthropic_api_key:
-    description: "Anthropic API key (alternative to OpenRouter)"
-    required: false
-  gemini_api_key:
-    description: "Google Gemini API key (alternative to OpenRouter)"
-    required: false
   zai_api_key:
-    description: "ZAI API key (alternative to OpenRouter)"
-    required: false
+    description: "ZAI API key for GLM-4.7 model"
+    required: true
   github_token:
     description: "GitHub token with repo permissions"
     required: false
     default: ${{ github.token }}
-
-  # Trigger configuration
   trigger_phrase:
     description: "The trigger phrase to look for in comments"
     required: false
     default: "@pi"
-  assignee_trigger:
-    description: "Username that triggers when assigned to issues"
-    required: false
-  label_trigger:
-    description: "Label that triggers the action"
-    required: false
-    default: "pi-agent"
-
-  # Execution configuration
-  prompt:
-    description: "Custom prompt/instructions for the agent"
-    required: false
   mode:
-    description: "Execution mode: auto, review, implement, triage, custom"
+    description: "Execution mode: auto, review, triage"
     required: false
     default: "auto"
-  max_turns:
-    description: "Maximum conversation turns"
-    required: false
-    default: "25"
   model:
-    description: "Model to use (e.g., zhipuai/glm-4.7, openai/gpt-4o)"
+    description: "Model to use"
     required: false
-    default: "zhipuai/glm-4.7"
-
-  # Feature flags
-  track_progress:
-    description: "Show progress tracking comments"
-    required: false
-    default: "true"
-  enable_learning:
-    description: "Enable Act-Learn-Reuse expertise system"
-    required: false
-    default: "true"
-  allowed_tools:
-    description: "Comma-separated list of allowed tools"
-    required: false
-    default: "Read,Write,Edit,Glob,Grep,Bash"
-
-  # Advanced
-  working_directory:
-    description: "Working directory for agent execution"
-    required: false
-    default: "."
-  timeout_minutes:
-    description: "Timeout for agent execution in minutes"
-    required: false
-    default: "10"
-
-outputs:
-  conclusion:
-    description: "Execution result: success, failure, or skipped"
-    value: ${{ steps.run-agent.outputs.conclusion }}
-  comment_id:
-    description: "ID of the response comment posted"
-    value: ${{ steps.run-agent.outputs.comment_id }}
-  branch_name:
-    description: "Name of branch created (if any)"
-    value: ${{ steps.run-agent.outputs.branch_name }}
-  session_id:
-    description: "Agent session ID for resumption"
-    value: ${{ steps.run-agent.outputs.session_id }}
+    default: "glm-4"
 
 runs:
   using: "composite"
   steps:
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: "22"
-
     - name: Check trigger
       id: check-trigger
       shell: bash
       env:
         TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
-        LABEL_TRIGGER: ${{ inputs.label_trigger }}
-        ASSIGNEE_TRIGGER: ${{ inputs.assignee_trigger }}
         EVENT_NAME: ${{ github.event_name }}
         COMMENT_BODY: ${{ github.event.comment.body || '' }}
         ISSUE_BODY: ${{ github.event.issue.body || '' }}
-        PR_BODY: ${{ github.event.pull_request.body || '' }}
-        ISSUE_LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
-        ISSUE_ASSIGNEES: ${{ toJson(github.event.issue.assignees.*.login) }}
       run: |
         SHOULD_RUN="false"
 
-        # Check comment trigger
         if [[ "$COMMENT_BODY" == *"$TRIGGER_PHRASE"* ]]; then
           echo "Triggered by comment mention"
           SHOULD_RUN="true"
         fi
 
-        # Check issue/PR body trigger
-        if [[ "$ISSUE_BODY" == *"$TRIGGER_PHRASE"* ]] || [[ "$PR_BODY" == *"$TRIGGER_PHRASE"* ]]; then
-          echo "Triggered by issue/PR body mention"
-          SHOULD_RUN="true"
-        fi
-
-        # Check label trigger
-        if [[ "$ISSUE_LABELS" == *"$LABEL_TRIGGER"* ]]; then
-          echo "Triggered by label"
-          SHOULD_RUN="true"
-        fi
-
-        # Check assignee trigger
-        if [[ -n "$ASSIGNEE_TRIGGER" ]] && [[ "$ISSUE_ASSIGNEES" == *"$ASSIGNEE_TRIGGER"* ]]; then
-          echo "Triggered by assignee"
-          SHOULD_RUN="true"
-        fi
-
-        # Check if prompt provided (automation mode)
-        if [[ -n "${{ inputs.prompt }}" ]]; then
-          echo "Triggered by explicit prompt (automation mode)"
-          SHOULD_RUN="true"
-        fi
-
-        # For PR events with auto mode, always run
-        if [[ "$EVENT_NAME" == "pull_request" ]] && [[ "${{ inputs.mode }}" == "auto" || "${{ inputs.mode }}" == "review" ]]; then
-          echo "Triggered by PR event in review mode"
+        if [[ "$ISSUE_BODY" == *"$TRIGGER_PHRASE"* ]]; then
+          echo "Triggered by issue body mention"
           SHOULD_RUN="true"
         fi
 
         echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
 
-    - name: Install dependencies
-      if: steps.check-trigger.outputs.should_run == 'true'
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      run: |
-        npm ci 2>/dev/null || npm install
-
     - name: Post progress comment
-      if: steps.check-trigger.outputs.should_run == 'true' && inputs.track_progress == 'true'
+      if: steps.check-trigger.outputs.should_run == 'true'
       id: progress-comment
       shell: bash
       env:
@@ -185,77 +76,73 @@ runs:
       id: run-agent
       shell: bash
       env:
-        OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-        GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
         ZAI_API_KEY: ${{ inputs.zai_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
-        PI_AGENT_MODE: ${{ inputs.mode }}
-        PI_AGENT_MODEL: ${{ inputs.model }}
-        PI_AGENT_MAX_TURNS: ${{ inputs.max_turns }}
-        PI_AGENT_ENABLE_LEARNING: ${{ inputs.enable_learning }}
-        PI_AGENT_ALLOWED_TOOLS: ${{ inputs.allowed_tools }}
         REPO: ${{ github.repository }}
-        EVENT_NAME: ${{ github.event_name }}
-        PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-        ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         COMMENT_BODY: ${{ github.event.comment.body || '' }}
         ISSUE_TITLE: ${{ github.event.issue.title || github.event.pull_request.title || '' }}
         ISSUE_BODY: ${{ github.event.issue.body || github.event.pull_request.body || '' }}
         ACTOR: ${{ github.actor }}
-        CUSTOM_PROMPT: ${{ inputs.prompt }}
-      working-directory: ${{ inputs.working_directory }}
-      timeout-minutes: ${{ fromJson(inputs.timeout_minutes) }}
+        MODEL: ${{ inputs.model }}
       run: |
-        # Build the prompt based on context
-        PROMPT=""
+        # Build the prompt
+        USER_PROMPT=$(echo "$COMMENT_BODY" | sed 's/@pi//g' | xargs)
 
-        if [[ -n "$CUSTOM_PROMPT" ]]; then
-          PROMPT="$CUSTOM_PROMPT"
-        elif [[ "$PI_AGENT_MODE" == "review" ]] || [[ "$EVENT_NAME" == "pull_request" ]]; then
-          PROMPT="Review PR #$PR_NUMBER in $REPO.
-
-        Analyze the changes and provide feedback on:
-        - Code quality and best practices
-        - Potential bugs or issues
-        - Security implications
-        - Performance considerations
-
-        Use gh CLI to view the diff and post inline comments."
-        elif [[ -n "$COMMENT_BODY" ]]; then
-          PROMPT="$COMMENT_BODY
-
-        Context:
-        - Repository: $REPO
-        - Issue/PR: #${ISSUE_NUMBER:-$PR_NUMBER}
-        - Triggered by: @$ACTOR"
-        elif [[ -n "$ISSUE_BODY" ]]; then
-          PROMPT="Issue: $ISSUE_TITLE
-
-        $ISSUE_BODY
-
-        Context:
-        - Repository: $REPO
-        - Issue: #$ISSUE_NUMBER
-        - Author: @$ACTOR"
-        else
-          PROMPT="Analyze the current repository state and provide insights."
+        if [[ -z "$USER_PROMPT" ]]; then
+          USER_PROMPT="Please analyze this issue: $ISSUE_TITLE"
         fi
 
-        # Run the agent using npx (uses pi-coding-agent from the monorepo)
-        echo "Running Pi Agent with prompt:"
-        echo "$PROMPT" | head -5
-        echo "..."
+        SYSTEM_PROMPT="You are Pi Agent, an AI assistant helping with GitHub issues and pull requests.
 
-        # Execute via the CLI
-        npx pi --print --max-turns "$PI_AGENT_MAX_TURNS" "$PROMPT" > /tmp/agent-output.txt 2>&1 || true
+Context:
+- Repository: $REPO
+- Issue/PR: #$ISSUE_NUMBER
+- Title: $ISSUE_TITLE
+- Requested by: @$ACTOR
 
-        # Capture output
-        OUTPUT=$(cat /tmp/agent-output.txt | tail -100)
+Provide helpful, concise responses. You can suggest code changes, debugging steps, or explanations."
+
+        # Get repository files for context
+        echo "Fetching repository structure..."
+        REPO_FILES=$(gh api repos/$REPO/contents 2>/dev/null | jq -r '.[].name' | head -20 | tr '\n' ', ' || echo "")
+
+        CONTEXT="Repository files: $REPO_FILES
+
+Issue body:
+$ISSUE_BODY"
+
+        # Call ZAI API
+        echo "Calling ZAI API with GLM-4.7..."
+        RESPONSE=$(curl -s -X POST "https://open.bigmodel.cn/api/paas/v4/chat/completions" \
+          -H "Authorization: Bearer $ZAI_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"model\": \"$MODEL\",
+            \"messages\": [
+              {\"role\": \"system\", \"content\": $(echo "$SYSTEM_PROMPT" | jq -Rs .)},
+              {\"role\": \"user\", \"content\": $(echo "$CONTEXT\n\nUser question: $USER_PROMPT" | jq -Rs .)}
+            ],
+            \"temperature\": 0.7,
+            \"max_tokens\": 2000
+          }")
+
+        # Extract response
+        AI_RESPONSE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Error: Unable to get response from AI"')
+
+        # Post response as comment
+        if [[ -n "$ISSUE_NUMBER" ]]; then
+          gh api repos/$REPO/issues/$ISSUE_NUMBER/comments \
+            -f body="🤖 **Pi Agent Response**
+
+$AI_RESPONSE
+
+---
+*Powered by ZAI GLM-4.7*" 2>&1 | grep -E "(id|message)" || true
+        fi
 
         echo "conclusion=success" >> $GITHUB_OUTPUT
-        echo "Agent execution completed"
 
     - name: Update progress comment
       if: always() && steps.progress-comment.outputs.comment_id != ''
@@ -277,10 +164,4 @@ runs:
           -X PATCH \
           -f body="🤖 **Pi Agent** $STATUS
 
-[View run details](https://github.com/$REPO/actions/runs/$RUN_ID)"
-
-    - name: Set skipped output
-      if: steps.check-trigger.outputs.should_run != 'true'
-      shell: bash
-      run: |
-        echo "conclusion=skipped" >> $GITHUB_OUTPUT
+[View run details](https://github.com/$REPO/actions/runs/$RUN_ID)" || true
