@@ -13,6 +13,8 @@
 ### Core Platform
 - **[pi-mono](https://github.com/badlogic/pi-mono)** - Official Pi Coding Agent platform
   - 81 Discord commands
+  - TAC Framework (8 lessons)
+  - Agentic Horizon (6 modules)
   - Expertise system (35 domains)
   - MCP registry (927 servers)
 
