@@ -25,7 +25,7 @@ inputs:
   model:
     description: "Model to use"
     required: false
-    default: "glm-4"
+    default: "glm-4-plus"
 
 runs:
   using: "composite"
