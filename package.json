@@ -1,0 +1,27 @@
+{
+  "name": "@mariozechner/pi-pai",
+  "version": "1.0.0",
+  "description": "Personal AI Infrastructure (PAI) for pi-mono ecosystem",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "npm run test"
+  },
+  "keywords": [
+    "pai",
+    "personal-ai",
+    "infrastructure",
+    "pi-mono",
+    "agent",
+    "loop"
+  ],
+  "author": "arosstale",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
