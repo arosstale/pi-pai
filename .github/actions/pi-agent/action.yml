@@ -51,9 +51,9 @@ inputs:
     required: false
     default: "25"
   model:
-    description: "Model to use (e.g., anthropic/claude-sonnet-4, openai/gpt-4o)"
+    description: "Model to use (e.g., zhipuai/glm-4.7, openai/gpt-4o)"
     required: false
-    default: "anthropic/claude-sonnet-4"
+    default: "zhipuai/glm-4.7"
 
   # Feature flags
   track_progress:

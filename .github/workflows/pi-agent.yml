@@ -59,7 +59,7 @@ jobs:
           trigger_phrase: "@pi"
           mode: "auto"
           track_progress: "true"
-          model: "zhipuai/glm-4-plus"
+          model: "zhipuai/glm-4.7"
 
   # Auto-review PRs (optional - uncomment to enable)
   # pr-review:
@@ -79,7 +79,7 @@ jobs:
   #         github_token: ${{ secrets.GITHUB_TOKEN }}
   #         mode: "review"
   #         track_progress: "true"
-  #         model: "zhipuai/glm-4-plus"
+  #         model: "zhipuai/glm-4.7"
 
   # Handle labeled issues
   labeled-issue:
@@ -104,7 +104,7 @@ jobs:
           mode: "triage"
           label_trigger: "pi-agent"
           track_progress: "true"
-          model: "zhipuai/glm-4-plus"
+          model: "zhipuai/glm-4.7"
 
   # Manual trigger
   manual:
@@ -126,4 +126,4 @@ jobs:
           prompt: ${{ github.event.inputs.prompt }}
           mode: ${{ github.event.inputs.mode }}
           track_progress: "true"
-          model: "zhipuai/glm-4-plus"
+          model: "zhipuai/glm-4.7"
