@@ -2,9 +2,9 @@
 
 ## Overview
 
-**pi-pai** is a comprehensive extension for **pi-mono** (the official Pi Coding Agent platform). It provides Personal AI Infrastructure (PAI) and Ralph Wiggum technique for rapid iteration.
+**pi-pai** is a comprehensive extension for **pi-mono** (the official Pi Coding Agent platform). It provides Personal AI Infrastructure (PAI) - Daniel Miessler's framework for goal pursuit and scientific method loops - as an extension that integrates with pi-mono's Discord bot, MCP registry, expertise system, and security protection.
 
-**Status:** ✅ **Extension for pi-mono** (NOT standalone)
+**Status:** ✅ **Extension for pi-mono**
 
 ---
 
@@ -45,58 +45,35 @@ while :; do cat PROMPT.md | pi ; done
 ```
 
 **Features:**
-- ✅ Iteration loop with `--max-iterations` limit
-- ✅ Completion promise detection via `<promise>TAG</promise>` tags
+- ✅ Iteration loop with max-iterations limit
+- ✅ Completion promise detection via <promise>TAG</promise> tags
 - ✅ Iteration counter displayed in status bar
 - ✅ Widget display showing loop progress above editor
 - ✅ Custom message renderer for Ralph loop messages
-- ✅ `Ctrl+R` keyboard shortcut to cancel loop
-- ✅ Prompt from file support (`--file`)
+- ✅ Ctrl+R keyboard shortcut to cancel loop
+- ✅ Prompt from file support (--file)
 - ✅ Status preservation across sessions
 - ✅ Strict validation (requires prompt + either max-iterations or completion-promise)
 - ✅ Optional subagent mode flag
 - ✅ Detailed completion summaries with iteration count and duration
 - ✅ Error recovery (continues loop on errors - errors are part of iteration)
 
-**When to Use Ralph Wiggum:**
-- Simple, iterative tasks
-- Rapid prototyping
-- Single-agent tasks
-- Quick experiments
-- When speed matters more than complexity
-
-**Why It Works:**
-- Direct, no overhead
-- Fast iteration (each loop is quick)
-- Easy to debug
-- Self-referential (AI sees own git history)
-- Time-tested (proven approach)
-
 ### 3. Damage Control (Security)
-
-**Origin:** https://github.com/disler/claude-code-damage-control
 
 **Purpose:** Defense-in-depth protection for pi-mono platform
 
 **100+ Protection Patterns:**
-- **Destructive Commands:** rm -rf, dd of=, git clean -fd, git reset --hard
-- **Git Destructive Commands:** git reset --hard, git push --force, git clean -fd, git branch -D
-- **Cloud Platform Commands:** AWS S3, RDS, GCP, Firebase, Vercel, Netlify, Heroku
-- **Database Commands:** DROP TABLE, TRUNCATE TABLE, DELETE FROM, FLUSHALL
-- **Docker Commands:** system prune, rmi, container rm, volume rm
-- **Kubernetes Commands:** delete namespace, delete pod, delete deployment
+- Destructive commands (rm -rf, dd of=, git clean -fd, git reset --hard)
+- Git destructive commands (git reset --hard, git push --force, git clean -fd, git branch -D)
+- Cloud platform commands (AWS S3, RDS, GCP, Firebase, Vercel, Netlify, Heroku)
+- Database commands (DROP TABLE, TRUNCATE TABLE, DELETE FROM, FLUSHALL, VACUUM)
+- Docker commands (system prune, rmi, container rm, volume rm)
+- Kubernetes commands (delete namespace, delete pod, delete deployment)
 
 **Three Protection Levels:**
 1. **Zero Access** - No read, write, edit, delete for secrets
-2. **Read Only** - Protect system files and configurations
-3. **No Delete** - Protect important files from deletion
-
-**Key Benefits:**
-- Blocks dangerous commands
-- Protects sensitive files and paths
-- Prevents destructive operations
-- Confirmation dialogs for risky actions
-- Audit logging for security events
+2. **Read Only** - Read allowed, modifications blocked
+3. **No Delete** - Read/write/edit allowed, delete blocked
 
 ---
 
@@ -105,38 +82,27 @@ while :; do cat PROMPT.md | pi ; done
 ```
 ┌─────────────────────────────────────────────────────┐
 │         PI-PAI EXTENSION FOR PI-MONO             │
-├─────────────────────────────────────────────────────────┤
-│                                                             │
+├─────────────────────────────────────────────────────┤
+│                                                     │
 │  ┌──────────────┐     ┌──────────────┐     ┌───────────┐  │
-│  │  PAI Loops   │────▶│ Ralph Loop   │────▶│ Damage Ctl │  │
-│  │  (Scientific  │     │ (Simple    │     │ (Security)  │  │
-│  │  Method)     │     │ Iteration)  │     │ (100+ patterns)│  │
-│  └──────┬───────┘     └──────┬───────┘     └──────┬─────┘  │
+│  │  PAI Loops    │────▶│  Ralph Loop   │────▶│  Damage Ctl │  │
+│  │  (Scientific   │     │  (Simple     │     │ (Security)  │  │
+│  │   Method)     │     │  Iteration)  │     │ (100+ patterns)│
+│  └──────┬───────┘     └──────┬───────┘     └─────┬──────┘  │
 │         │                       │                      │          │  │
 │         ▼                       ▼                      ▼          │  │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │     INTEGRATION LAYER                    │   │
-│  ├─────────────────────────────────────────────────────┤  │
+│  ┌───────────────────────────────────────────────┐   │
+│  │           INTEGRATION LAYER                │   │
+│  ├───────────────────────────────────────────────┤   │
 │  │  • Discord Bot Commands (81 available)      │   │
-│  │  • CLI Integration                      │   │
-│  │  • MCP Registry Access (927 servers)      │   │
-│  │  • Act-Learn-Reuse (compound learning)        │   │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+│  │  • CLI Integration                            │   │
+│  │  • MCP Registry Access (927 servers)       │   │
+│  │  • Expertise System Sharing (35 domains)    │   │
+│  │  • Act-Learn-Reuse (compound learning)      │   │
+│  └───────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
 ```
-
----
-
-## 📊 FEATURES COMPARISON
-
-| Feature | PAI Loops | Ralph Wiggum | Damage Control | Best For |
-|---------|-------------|--------------|---------------|-----------|
-| Simplicity | Low | High | Low | Ralph Wiggum (simple tasks) |
-| Speed | Medium | High | Low | Ralph Wiggum (rapid iteration) |
-| Complexity | High | Low | Medium | PAI Loops (complex workflows) |
-| Learning | High | Low | Low | PAI Loops (scientific method) |
-| Security | Low | Low | High | Damage Control (any time) |
 
 ---
 
@@ -145,6 +111,14 @@ while :; do cat PROMPT.md | pi ; done
 ### Installation
 
 pi-pai is automatically loaded as an extension in pi-mono.
+
+```bash
+# Verify extension is loaded
+pi status extensions
+
+# Should show:
+# @badlogic/pi-mono-pai loaded
+```
 
 ### Basic Usage
 
@@ -188,6 +162,42 @@ pi-pai is automatically loaded as an extension in pi-mono.
 
 ---
 
+## 📊 FEATURES
+
+### PAI Features
+- ✅ Two-loop architecture (Outer + Inner)
+- ✅ 7-phase scientific method
+- ✅ Goal pursuit system
+- ✅ Strategy generation
+- ✅ Gap analysis
+
+### Ralph Wiggum Features
+- ✅ Simple iteration loop
+- ✅ Self-referential learning from git history
+- ✅ Completion promise detection
+- ✅ Iteration counter and status bar
+- ✅ Widget display above editor
+- ✅ Custom message renderer
+- ✅ Ctrl+R keyboard shortcut
+- ✅ Prompt from file support
+- ✅ Status preservation
+- ✅ Strict validation
+- ✅ Optional subagent mode
+- ✅ Detailed completion summaries
+- ✅ Error recovery
+
+### Damage Control Features
+- ✅ 100+ protection patterns
+- ✅ Three protection levels (zero-access, read-only, no-delete)
+- ✅ Pattern-based command detection
+- ✅ Path protection for sensitive files
+- ✅ Pre-tool-use validation
+- ✅ Post-tool-use logging
+- ✅ Confirmation dialogs for dangerous operations
+- ✅ Audit logging for security events
+
+---
+
 ## 📈 GROWTH METRICS
 
 ### Compound Learning
@@ -203,40 +213,13 @@ pi-pai is automatically loaded as an extension in pi-mono.
 
 ---
 
-## 🎯 WHEN TO USE EACH COMPONENT
-
-### 🟢 Use Ralph Wiggum When:
-- Simple, iterative tasks
-- Rapid prototyping
-- "I need this done in 10 minutes"
-- Make it work, don't overthink
-
-### 🟡 Use PAI (Scientific Method) When:
-- Complex, multi-step workflows
-- "Research → Plan → Build → Test → Deploy → Monitor"
-- Long-term projects
-- Need knowledge compounding
-
-### 🟣 Use Damage Control When:
-- Any time (defensive security)
-- Working in code repository
-- Dealing with production systems
-- Need to prevent destructive operations
-
----
-
 ## 📚 DOCUMENTATION
 
-### Extension Documentation
-- [Extension Architecture](docs/ARCHITECTURE.md)
-- [Integration Guide](docs/INTEGRATION.md)
-- [Pack System](docs/PACKS.md)
+- [PAI Architecture](docs/PAI-ARCHITECTURE.md)
+- [Ralph Wiggum Guide](docs/RALPH-WIGGUM-GUIDE.md)
+- [Damage Control Guide](docs/DAMAGE-CONTROL-GUIDE.md)
+- [Integration Guide](docs/INTEGRATION-GUIDE.md)
 - [Development Guide](docs/DEVELOPMENT.md)
-
-### Component Documentation
-- [PAI Integration](docs/pai-integration.md)
-- [Ralph Wiggum Guide](docs/ralph-wiggum-guide.md)
-- [Damage Control Guide](docs/damage-control-guide.md)
 
 ---
 
@@ -251,34 +234,14 @@ MIT License - Compatible with pi-mono
 **pi-mono Platform:** https://github.com/badlogic/pi-mono
 **pi-pai Extension:** https://github.com/arosstale/pi-pai
 
-**Type:** Extension for pi-mono
-**Version:** 1.2.0
-**Status:** ✅ TAC Framework references removed
-**Status:** ✅ Agentic Horizon references removed
-**Status:** ✅ Clean (PAI + Ralph + Damage Control only)
-
 ---
 
 ## 🎉 SUMMARY
 
-**pi-pai** is a clean extension for **pi-mono** platform that provides:
+**pi-pai** is a comprehensive extension for **pi-mono** platform that provides:
 
-- ✅ **PAI** - Personal AI Infrastructure (scientific method loops)
-- ✅ **Ralph Wiggum** - Simple iteration technique (rapid development)
-- ✅ **Damage Control** - Security protection (100+ patterns)
-- ✅ **Discord Bot Integration** - All commands available in pi-mono
-- ✅ **MCP Registry Access** - 927 servers, 13,062+ tools
-- ✅ **Integration Layer** - CLI, PAI, Ralph, Damage Control all integrated
+- ✅ **PAI (Personal AI Infrastructure)** - Daniel Miessler's framework
+- ✅ **Ralph Wiggum** - Simple iteration technique
+- ✅ **Damage Control** - Security protection
 
-**What Was Removed:**
-- ❌ TAC Framework references (8 lessons + 6 modules)
-- ❌ Agentic Horizon references
-- ❌ All private pi-mono component references
-
-**What Remains:**
-- ✅ Pure PAI (Daniel Miessler's framework)
-- ✅ Ralph Wiggum (simple iteration)
-- ✅ Damage Control (security patterns)
-- ✅ Integration with pi-mono platform
-
-**Your Pi-Mono ecosystem is now clean and focused on PAI, Ralph Wiggum, and Damage Control!** 🚀
+**Result:** A complete goal pursuit and learning system integrated into pi-mono platform!

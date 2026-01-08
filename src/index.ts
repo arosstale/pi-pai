@@ -1,6 +1,6 @@
 /**
  * pi-pai - Personal AI Infrastructure
- * Standalone PAI implementation (no TAC or Agentic Horizon)
+ * Clean version - NO TAC, NO Agentic Horizon
  * pi-mono Extension: @badlogic/pi-mono-pai
  */
 
@@ -10,13 +10,13 @@ export { RalphWiggum, createRalphLoop, type RalphState, type RalphLoopContext, t
 export { DamageControlHook, createDamageControlHook, type DamageControlConfig, type ProtectionLevel } from './pacs/system/damage-control/damage-control-hook.js';
 
 export class PersonalAIInfrastructure {
-  version = '1.2.0';
+  version = '1.3.0';
   extensionName = 'pi-mono-pai';
 
   async initialize(): Promise<void> {
     console.log('Initializing PAI system...');
     console.log(`Version: ${this.version}`);
-    console.log('Extension: ${this.extensionName} for pi-mono`);
+    console.log(`Extension: ${this.extensionName} for pi-mono`);
     console.log('Components:');
     console.log('  • PAI Loops (Outer + Inner 7-phase)');
     console.log('  • Ralph Wiggum (Simple Iteration)');
