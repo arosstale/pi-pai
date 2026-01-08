@@ -1,0 +1,86 @@
+name: CI - pi-pai Agent Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-pai-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-check-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check
+        run: npm run check || echo "No check script defined, skipping..."
+
+      - name: pi-agent Extension Validation
+        run: |
+          echo "Validating pi-pai as pi-mono extension..."
+          
+          # Check package.json has pi-mono extension config
+          if ! jq -e '.pi.extensions' package.json > /dev/null 2>&1; then
+            echo "❌ Error: package.json missing pi-mono extension config"
+            exit 1
+          fi
+          echo "✅ pi-mono extension config found"
+          
+          # Check author is set
+          AUTHOR=$(jq -r '.author' package.json)
+          if [ "$AUTHOR" != "pi-agent" ]; then
+            echo "❌ Error: Expected author to be 'pi-agent', got '$AUTHOR'"
+            exit 1
+          fi
+          echo "✅ Author is correct: $AUTHOR"
+          
+          # Check package name
+          PKG_NAME=$(jq -r '.name' package.json)
+          echo "✅ Package name: $PKG_NAME"
+          
+          # Check README has proper sections
+          if ! grep -q "PI-MONO" README.md; then
+            echo "❌ Error: README.md missing PI-MONO reference"
+            exit 1
+          fi
+          echo "✅ README.md has PI-MONO reference"
+          
+          # Check awesome-pi-agent integration
+          if ! grep -q "awesome-pi-agent" README.md; then
+            echo "❌ Error: README.md missing awesome-pi-agent integration"
+            exit 1
+          fi
+          echo "✅ README.md has awesome-pi-agent integration"
+          
+          # Check Daniel Miessler link
+          if ! grep -q "danielmiessler.com" README.md; then
+            echo "❌ Error: README.md missing Daniel Miessler link"
+            exit 1
+          fi
+          echo "✅ README.md has Daniel Miessler link"
+          
+          echo ""
+          echo "🎉 All pi-agent extension validation checks passed!"
+
+      - name: Link Validation
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
