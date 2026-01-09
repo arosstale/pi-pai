@@ -1,5 +1,5 @@
 name: "Pi Agent Action"
-description: "AI-powered GitHub automation using ZAI GLM Coding Plan. Responds to @pi mentions, reviews PRs, and triages issues."
+description: "AI-powered GitHub automation using Groq API (FREE). Responds to @pi mentions, reviews PRs, and triages issues."
 author: "pi-mono"
 
 branding:
@@ -7,9 +7,9 @@ branding:
   color: "purple"
 
 inputs:
-  zai_api_key:
-    description: "ZAI API key for GLM Coding Plan"
-    required: true
+  groq_api_key:
+    description: "Groq API key (free tier available)"
+    required: false
   github_token:
     description: "GitHub token with repo permissions"
     required: false
@@ -25,7 +25,7 @@ inputs:
   model:
     description: "Model to use"
     required: false
-    default: "glm-4-plus"
+    default: "llama-3.3-70b-versatile"
 
 runs:
   using: "composite"
@@ -76,7 +76,7 @@ runs:
       id: run-agent
       shell: bash
       env:
-        ZAI_API_KEY: ${{ inputs.zai_api_key }}
+        GROQ_API_KEY: ${{ inputs.groq_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
         REPO: ${{ github.repository }}
@@ -113,10 +113,10 @@ Provide helpful, concise responses. You can suggest code changes, debugging step
 Issue body:
 $ISSUE_BODY"
 
-        # Call ZAI CODING API endpoint (for GLM Coding Plan subscription)
-        echo "Calling ZAI Coding API with GLM-4-Plus..."
-        RESPONSE=$(curl -s -X POST "https://api.z.ai/api/coding/paas/v4/chat/completions" \
-          -H "Authorization: Bearer $ZAI_API_KEY" \
+        # Call Groq API
+        echo "Calling Groq API with Llama 3.3 70B..."
+        RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+          -H "Authorization: Bearer $GROQ_API_KEY" \
           -H "Content-Type: application/json" \
           -d "{
             \"model\": \"$MODEL\",
@@ -134,17 +134,9 @@ $ISSUE_BODY"
         # Check for API errors
         ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // ""')
         if [[ -n "$ERROR_MSG" ]]; then
-          AI_RESPONSE="⚠️ Error calling ZAI Coding API: $ERROR_MSG
+          AI_RESPONSE="⚠️ Error calling Groq API: $ERROR_MSG
 
-Debug info:
-- Endpoint: https://api.z.ai/api/coding/paas/v4/chat/completions
-- Model: $MODEL
-- Error code: $(echo "$RESPONSE" | jq -r '.error.code // "unknown"')
-
-Please check:
-1. ZAI_API_KEY is configured in repository secrets
-2. Your GLM Coding Plan subscription is active
-3. API key has proper permissions"
+Please check that GROQ_API_KEY is configured in repository secrets."
         fi
 
         # Post response as comment
@@ -155,7 +147,7 @@ Please check:
 $AI_RESPONSE
 
 ---
-*Powered by ZAI GLM Coding Plan (Coding Endpoint)*" 2>&1 | grep -E "(id|message)" || true
+*Powered by Groq Llama 3.3 70B (FREE)*" 2>&1 | grep -E "(id|message)" || true
         fi
 
         echo "conclusion=success" >> $GITHUB_OUTPUT
