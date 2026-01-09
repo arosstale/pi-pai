@@ -63,11 +63,7 @@ runs:
         ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
       run: |
         if [[ -n "$ISSUE_NUMBER" ]]; then
-          COMMENT_ID=$(gh api repos/$REPO/issues/$ISSUE_NUMBER/comments \
-            -f body="🤖 **Pi Agent** is processing your request...
-
-⏳ Working on it..." \
-            --jq '.id')
+          COMMENT_ID=$(gh api repos/$REPO/issues/$ISSUE_NUMBER/comments -f body="🤖 Pi Agent processing..." --jq '.id')
           echo "comment_id=$COMMENT_ID" >> $GITHUB_OUTPUT
         fi
 
@@ -87,69 +83,22 @@ runs:
         ACTOR: ${{ github.actor }}
         MODEL: ${{ inputs.model }}
       run: |
-        # Build the prompt
         USER_PROMPT=$(echo "$COMMENT_BODY" | sed 's/@pi//g' | xargs)
-
         if [[ -z "$USER_PROMPT" ]]; then
           USER_PROMPT="Please analyze this issue: $ISSUE_TITLE"
         fi
-
-        SYSTEM_PROMPT="You are Pi Agent, an AI assistant helping with GitHub issues and pull requests.
-
-Context:
-- Repository: $REPO
-- Issue/PR: #$ISSUE_NUMBER
-- Title: $ISSUE_TITLE
-- Requested by: @$ACTOR
-
-Provide helpful, concise responses. You can suggest code changes, debugging steps, or explanations."
-
-        # Get repository files for context
-        echo "Fetching repository structure..."
+        SYSTEM_PROMPT="You are Pi Agent, an AI assistant helping with GitHub issues and pull requests. Context: Repository $REPO, Issue/PR #$ISSUE_NUMBER, Title: $ISSUE_TITLE, Requested by @$ACTOR. Provide helpful, concise responses."
         REPO_FILES=$(gh api repos/$REPO/contents 2>/dev/null | jq -r '.[].name' | head -20 | tr '\n' ', ' || echo "")
-
-        CONTEXT="Repository files: $REPO_FILES
-
-Issue body:
-$ISSUE_BODY"
-
-        # Call Groq API
-        echo "Calling Groq API with Llama 3.3 70B..."
-        RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
-          -H "Authorization: Bearer $GROQ_API_KEY" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"model\": \"$MODEL\",
-            \"messages\": [
-              {\"role\": \"system\", \"content\": $(echo "$SYSTEM_PROMPT" | jq -Rs .)},
-              {\"role\": \"user\", \"content\": $(echo "$CONTEXT\n\nUser question: $USER_PROMPT" | jq -Rs .)}
-            ],
-            \"temperature\": 0.7,
-            \"max_tokens\": 2000
-          }")
-
-        # Extract response
-        AI_RESPONSE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Error: Unable to get response from AI"')
-
-        # Check for API errors
+        CONTEXT="Repository files: $REPO_FILES. Issue body: $ISSUE_BODY"
+        RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" -H "Authorization: Bearer $GROQ_API_KEY" -H "Content-Type: application/json" -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"system\",\"content\":$(echo "$SYSTEM_PROMPT" | jq -Rs .)},{\"role\":\"user\",\"content\":$(echo "$CONTEXT. User question: $USER_PROMPT" | jq -Rs .)}],\"temperature\":0.7,\"max_tokens\":2000}")
+        AI_RESPONSE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Error: Unable to get response"')
         ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // ""')
         if [[ -n "$ERROR_MSG" ]]; then
-          AI_RESPONSE="⚠️ Error calling Groq API: $ERROR_MSG
-
-Please check that GROQ_API_KEY is configured in repository secrets."
+          AI_RESPONSE="Error calling Groq API: $ERROR_MSG. Please check GROQ_API_KEY is configured."
         fi
-
-        # Post response as comment
         if [[ -n "$ISSUE_NUMBER" ]]; then
-          gh api repos/$REPO/issues/$ISSUE_NUMBER/comments \
-            -f body="🤖 **Pi Agent Response**
-
-$AI_RESPONSE
-
----
-*Powered by Groq Llama 3.3 70B (FREE)*" 2>&1 | grep -E "(id|message)" || true
+          gh api repos/$REPO/issues/$ISSUE_NUMBER/comments -f body="🤖 Pi Agent Response: $AI_RESPONSE --- Powered by Groq Llama 3.3 70B (FREE)" || true
         fi
-
         echo "conclusion=success" >> $GITHUB_OUTPUT
 
     - name: Update progress comment
@@ -167,9 +116,4 @@ $AI_RESPONSE
         else
           STATUS="❌ Failed"
         fi
-
-        gh api repos/$REPO/issues/comments/$COMMENT_ID \
-          -X PATCH \
-          -f body="🤖 **Pi Agent** $STATUS
-
-[View run details](https://github.com/$REPO/actions/runs/$RUN_ID)" || true
+        gh api repos/$REPO/issues/comments/$COMMENT_ID -X PATCH -f body="🤖 Pi Agent $STATUS - View: https://github.com/$REPO/actions/runs/$RUN_ID" || true
