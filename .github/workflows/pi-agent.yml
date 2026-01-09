@@ -54,11 +54,11 @@ jobs:
 
       - uses: ./.github/actions/pi-agent
         with:
-          zai_api_key: ${{ secrets.ZAI_API_KEY }}
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           trigger_phrase: "@pi"
           mode: "auto"
-          model: "glm-4-plus"
+          model: "llama-3.3-70b-versatile"
 
   # Auto-review PRs (optional - uncomment to enable)
   # pr-review:
@@ -74,10 +74,10 @@ jobs:
   #
   #     - uses: ./.github/actions/pi-agent
   #       with:
-  #         zai_api_key: ${{ secrets.ZAI_API_KEY }}
+  #         groq_api_key: ${{ secrets.GROQ_API_KEY }}
   #         github_token: ${{ secrets.GITHUB_TOKEN }}
   #         mode: "review"
-  #         model: "glm-4-plus"
+  #         model: "llama-3.3-70b-versatile"
 
   # Handle labeled issues
   labeled-issue:
@@ -97,11 +97,11 @@ jobs:
 
       - uses: ./.github/actions/pi-agent
         with:
-          zai_api_key: ${{ secrets.ZAI_API_KEY }}
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: "triage"
           label_trigger: "pi-agent"
-          model: "glm-4-plus"
+          model: "llama-3.3-70b-versatile"
 
   # Manual trigger
   manual:
@@ -118,8 +118,8 @@ jobs:
 
       - uses: ./.github/actions/pi-agent
         with:
-          zai_api_key: ${{ secrets.ZAI_API_KEY }}
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: ${{ github.event.inputs.prompt }}
           mode: ${{ github.event.inputs.mode }}
-          model: "glm-4-plus"
+          model: "llama-3.3-70b-versatile"
