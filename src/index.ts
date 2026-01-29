@@ -8,7 +8,8 @@
 export { OuterLoop, outerLoop, type CurrentState, type DesiredState, type Gap } from './core/outer-loop.js';
 export { InnerLoop, runInnerLoop, type InnerLoopPhase, type InnerLoopContext } from './core/inner-loop.js';
 export { RalphWiggum, createRalphLoop, type RalphLoopContext, type RalphLoopResult } from './ralph/ralph-wiggum.js';
-export { DamageControlHook, createDamageControlHook, type DamageControlConfig, type ProtectionLevel } from './packs/system/damage-control/damage-control-hook';
+export { DamageControlHook, createDamageControlHook, DamageControlConfig, ProtectionLevel } from './packs/system/damage-control/hooks/damage-control-hook.js';
+export { PAIObservabilityServer, createPAIObservabilityServer, type PAIMetrics, type SystemHealth, type GoalProgress, type SystemMetrics, type Activity } from './packs/system/observability-server.js';
 
 export class PersonalAIInfrastructure {
   version = '1.4.0';
@@ -23,6 +24,7 @@ export class PersonalAIInfrastructure {
     console.log('  • PAI Loops (Outer + Inner 7-phase)');
     console.log('  • Ralph Wiggum (Simple Iteration)');
     console.log('  • Damage Control (Security Protection)');
+    console.log('  • Observability Server (Metrics & Monitoring)');
     console.log('  • awesome-pi-agent Integration (Ecosystem Hub)');
     console.log('PAI system ready!');
   }
@@ -39,6 +41,7 @@ export class PersonalAIInfrastructure {
         innerLoop: 'ready',
         ralphWiggum: 'ready',
         damageControl: 'ready',
+        observability: 'ready',
         awesomePaiAgent: 'ready'
       }
     };

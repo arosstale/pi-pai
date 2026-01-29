@@ -3,7 +3,7 @@
  * Blocks dangerous commands and protects sensitive files
  */
 
-// Placeholder types for pi-mono compatibility
+import { readFile } from 'fs/promises';
 export interface Tool {
   name: string;
   description: string;
@@ -13,11 +13,14 @@ export interface ToolResult {
   success: boolean;
   message: string;
   content?: any;
+  isError?: boolean;
 }
+
+export type ProtectionLevel = 'strict' | 'balanced' | 'permissive';
 
 export interface DamageControlConfig {
   enabled: boolean;
-  level: 'strict' | 'balanced' | 'permissive';
+  level: ProtectionLevel;
   askOnDangerous: boolean;
   logViolations: boolean;
 }
@@ -43,12 +46,16 @@ export class DamageControlHook {
    * Load protection patterns
    */
   private async loadPatterns(): Promise<void> {
-    const { readFile } = require('fs/promises');
-    const patternsContent = await readFile(
-      '/tmp/pi-pai/src/packs/system/damage-control/patterns.yaml',
-      'utf8'
-    );
-    this.patterns = this.parseYaml(patternsContent);
+    try {
+      const patternsContent = await readFile(
+        '/tmp/pi-pai/src/packs/system/damage-control/patterns.yaml',
+        'utf8'
+      );
+      this.patterns = this.parseYaml(patternsContent);
+    } catch (error) {
+      // If patterns file doesn't exist, use empty patterns
+      this.patterns = {};
+    }
   }
 
   /**
@@ -175,6 +182,8 @@ export class DamageControlHook {
       if (this.isDangerousCommand(command)) {
         if (this.config.askOnDangerous) {
           return {
+            success: false,
+            message: `[DAMAGE-CONTROL] ⚠️  Dangerous command detected: ${command}`,
             content: [{
               type: 'text',
               text: `[DAMAGE-CONTROL] ⚠️  Dangerous command detected: ${command}`
@@ -183,6 +192,8 @@ export class DamageControlHook {
           };
         } else {
           return {
+            success: false,
+            message: `[DAMAGE-CONTROL] ❌ Dangerous command blocked: ${command}`,
             content: [{
               type: 'text',
               text: `[DAMAGE-CONTROL] ❌ Dangerous command blocked: ${command}`
@@ -200,6 +211,8 @@ export class DamageControlHook {
       if (this.isSensitivePath(filePath)) {
         if (this.config.askOnDangerous) {
           return {
+            success: false,
+            message: `[DAMAGE-CONTROL] ⚠️  Sensitive path detected: ${filePath}`,
             content: [{
               type: 'text',
               text: `[DAMAGE-CONTROL] ⚠️  Sensitive path detected: ${filePath}`
@@ -208,6 +221,8 @@ export class DamageControlHook {
           };
         } else {
           return {
+            success: false,
+            message: `[DAMAGE-CONTROL] ❌ Write to sensitive path blocked: ${filePath}`,
             content: [{
               type: 'text',
               text: `[DAMAGE-CONTROL] ❌ Write to sensitive path blocked: ${filePath}`
