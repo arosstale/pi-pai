@@ -22,24 +22,38 @@ Implements [Daniel Miessler's PAI Algorithm](https://danielmiessler.com/personal
 
 > **Observe → Think → Plan → Define → Execute → Measure → Learn**
 
-Track your mission, goals, challenges, and learnings:
+Quick start with a template:
+
+```bash
+/pai template trading    # Loads mission + 4 goals + 2 challenges instantly
+/pai template saas       # SaaS launch: MVP, users, perf, CI/CD
+/pai template devops     # Infra: zero-downtime, monitoring, SLA, runbooks
+/pai template research   # Research: questions, sources, synthesis, recs
+/pai template agent      # AI agent: capabilities, tools, testing, deploy
+```
+
+Or build your own:
 
 ```bash
 /pai mission Build a profitable trading system
 /pai goal Deploy live stat-arb strategy
 /pai goal Achieve >55% win rate on paper trades
 /pai challenge Overfitting risk on historical data
-/pai loop Deploy live strategy
-/pai next Observed: spread mean-reverts with 3.2 std threshold
+/pai block g1                    # Mark goal as blocked
+/pai loop Deploy live strategy   # Start 7-phase algorithm
+/pai effort extended             # Set effort level
+/pai isc Strategy achieves Sharpe >1.5 on 5-year backtest
+/pai next Observed: spread mean-reverts at 3.2 std threshold
 /pai next Hypothesis: entry at 2.5 std, exit at 0.5 std
 /pai next Plan: backtest 2020-2025, then paper trade 2 weeks
-/pai next Success criteria: Sharpe >1.5, max DD <15%
+/pai next Success criteria defined via ISC above
 /pai next Results: 58% win rate, Sharpe 1.8
 /pai next Measurements logged
 /pai next Key learning: tighter stops improve Sharpe by 0.3
 /pai learn Tighter stops at 1.5 std improve risk-adjusted returns
 /pai done g0
 /pai status
+/pai reset                       # Clear everything
 ```
 
 ### `/ralph` — Simple Iteration
