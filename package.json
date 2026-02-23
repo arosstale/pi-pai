@@ -1,7 +1,7 @@
 {
   "name": "@arosstale/pi-pai",
-  "version": "2.0.0",
-  "description": "Personal AI Infrastructure extension for Pi — TELOS goals, inner/outer loops, Ralph Wiggum iteration, and damage control",
+  "version": "3.0.0",
+  "description": "Personal AI Infrastructure extension for Pi — Miessler's Algorithm with ISC, disler's 97+ damage-control patterns, Ralph Wiggum iteration, rating capture, and live TUI widget",
   "type": "module",
   "main": "src/extension.ts",
   "pi": {
