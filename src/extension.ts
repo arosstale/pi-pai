@@ -299,8 +299,63 @@ export default function (pi: ExtensionAPI) {
 
   // ── /pai command ─────────────────────────────────────────────────────────
 
+  // ── Templates ─────────────────────────────────────────────────────────
+
+  const templates: Record<string, { mission: string; goals: string[]; challenges: string[] }> = {
+    trading: {
+      mission: 'Build a profitable algorithmic trading system',
+      goals: [
+        'Develop and backtest core strategy',
+        'Achieve >55% win rate on paper trades',
+        'Deploy live with risk management',
+        'Maintain Sharpe ratio >1.5',
+      ],
+      challenges: ['Overfitting risk on historical data', 'Execution latency in live markets'],
+    },
+    saas: {
+      mission: 'Launch a production SaaS product',
+      goals: [
+        'Ship MVP with auth, billing, and core feature',
+        'Acquire first 10 paying users',
+        'Achieve <2s p95 page load',
+        'Set up CI/CD and monitoring',
+      ],
+      challenges: ['Scope creep', 'Premature optimization'],
+    },
+    devops: {
+      mission: 'Build reliable infrastructure and deployment pipeline',
+      goals: [
+        'Automate deployments with zero downtime',
+        'Set up monitoring and alerting',
+        'Achieve 99.9% uptime SLA',
+        'Document runbooks for on-call',
+      ],
+      challenges: ['Alert fatigue', 'Configuration drift'],
+    },
+    research: {
+      mission: 'Complete deep research project with actionable findings',
+      goals: [
+        'Define research questions and scope',
+        'Collect and analyze primary sources',
+        'Synthesize findings into report',
+        'Present recommendations',
+      ],
+      challenges: ['Source reliability', 'Scope management'],
+    },
+    agent: {
+      mission: 'Build and ship a production AI agent',
+      goals: [
+        'Define agent capabilities and constraints',
+        'Implement tool use and error handling',
+        'Test with adversarial inputs',
+        'Deploy with monitoring and kill switch',
+      ],
+      challenges: ['Prompt injection risk', 'Cost control', 'Hallucination detection'],
+    },
+  }
+
   pi.registerCommand('pai', {
-    description: 'PAI system: /pai mission|goal|done|challenge|learn|loop|next|isc|effort|status',
+    description: 'PAI system: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status',
     handler: async (args, ctx) => {
       widgetCtx = ctx
       const parts = (args || '').trim().split(/\s+/)
@@ -468,8 +523,62 @@ export default function (pi: ExtensionAPI) {
           break
         }
 
+        case 'block': {
+          const gid = rest.trim()
+          const goal = state.goals.get(gid)
+          if (!goal) { ctx.ui.notify(`Goal "${gid}" not found`, 'error'); return }
+          goal.status = 'blocked'
+          pi.appendEntry('pai-goal-blocked', { goalId: gid, ts: new Date().toISOString() })
+          ctx.ui.notify(`🚫 Blocked: ${goal.title}`, 'warning')
+          updateWidget()
+          break
+        }
+
+        case 'template': {
+          const name = rest.trim().toLowerCase()
+          const available = Object.keys(templates)
+          if (!name || !templates[name]) {
+            ctx.ui.notify(`Templates: ${available.join(', ')}`, 'info')
+            return
+          }
+          const t = templates[name]
+          state.mission = t.mission
+          pi.appendEntry('pai-mission', { mission: t.mission, template: name, ts: new Date().toISOString() })
+          for (const title of t.goals) {
+            const id = `g${state.goals.size}`
+            const goal: Goal = { id, title, status: 'active', priority: 'p1', isc: [] }
+            state.goals.set(id, goal)
+            pi.appendEntry('pai-goal', { ...goal, ts: new Date().toISOString() })
+          }
+          for (const title of t.challenges) {
+            const cid = `c${state.challenges.size}`
+            const ch: Challenge = { id: cid, title, severity: 'medium', affectedGoals: [] }
+            state.challenges.set(cid, ch)
+            pi.appendEntry('pai-challenge', { ...ch, ts: new Date().toISOString() })
+          }
+          ctx.ui.notify(`📋 Template "${name}": ${t.goals.length} goals, ${t.challenges.length} challenges`, 'success')
+          updateWidget()
+          break
+        }
+
+        case 'reset': {
+          state.mission = null
+          state.goals.clear()
+          state.challenges.clear()
+          state.learnings = []
+          state.ratings = []
+          state.innerLoop = null
+          state.iterationCount = 0
+          state.ralphIteration = 0
+          state.ralphActive = false
+          pi.appendEntry('pai-reset', { ts: new Date().toISOString() })
+          ctx.ui.notify('🗑️ PAI state reset', 'warning')
+          updateWidget()
+          break
+        }
+
         default:
-          ctx.ui.notify('/pai mission|goal|done|challenge|learn|loop|next|isc|effort|status', 'info')
+          ctx.ui.notify('/pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status', 'info')
       }
     },
   })
