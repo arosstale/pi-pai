@@ -1,21 +1,14 @@
 /**
- * π-PAI v3 — Personal AI Infrastructure Extension for Pi
+ * π-PAI v3.1 — Personal AI Infrastructure Extension for Pi
  *
- * Merges three lineages:
- * 1. Daniel Miessler's PAI v3.0 Algorithm (7-phase, ISC, effort levels, learnings)
- * 2. disler's damage-control patterns (97 bash patterns, zero-access/read-only/no-delete paths)
- * 3. disler's pi-vs-claude-code extension patterns (widgets, tool_call hooks, session persistence)
+ * Merges:
+ * 1. Daniel Miessler's PAI Algorithm (7-phase, ISC, effort levels, learnings)
+ * 2. disler's damage-control (97+ bash patterns via YAML)
+ * 3. disler's pi-vs-claude-code extension patterns (widgets, tool_call hooks)
  *
- * Features:
- * - /pai command: mission, goals, challenges, learnings, 7-phase inner loop with ISC
- * - /ralph command: simple iteration loops (Ralph Wiggum technique)
- * - Damage control: 97+ bash patterns, path protection via YAML rules
- * - Rating capture: /rate <1-10> for signal-based learning
- * - pai_status, pai_learn, pai_rate tools for agent-driven use
- * - Live TUI widget: mission, goals, loop phase, effort level
- * - Session persistence via pi.appendEntry()
- *
- * Usage: pi -e path/to/pi-pai/src/extension.ts
+ * v3.1: Carmack review — killed hand-rolled YAML parser (→ js-yaml),
+ * split /pai switch into dispatch table, externalized templates to JSON,
+ * fixed isPathMatch to single canonical strategy.
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
@@ -23,38 +16,18 @@ import { Type } from '@sinclair/typebox'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import YAML from 'js-yaml'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type AlgorithmPhase = 'OBSERVE' | 'THINK' | 'PLAN' | 'DEFINE' | 'EXECUTE' | 'MEASURE' | 'LEARN'
 type EffortLevel = 'instant' | 'fast' | 'standard' | 'extended' | 'deep'
 type GoalStatus = 'active' | 'blocked' | 'completed' | 'paused'
-type Priority = 'p0' | 'p1' | 'p2' | 'p3'
-type SignalRating = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
 
-interface Goal {
-  id: string
-  title: string
-  status: GoalStatus
-  priority: Priority
-  blockedBy?: string[]
-  isc?: string[] // Ideal State Criteria
-}
-
-interface Challenge {
-  id: string
-  title: string
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  affectedGoals: string[]
-}
-
-interface Learning {
-  insight: string
-  confidence: number
-  category: 'algorithm' | 'system' | 'domain' | 'process'
-  timestamp: Date
-  fromRating?: number
-}
+interface Goal { id: string; title: string; status: GoalStatus; priority: string; isc?: string[] }
+interface Challenge { id: string; title: string; severity: string; affectedGoals: string[] }
+interface Learning { insight: string; confidence: number; category: string; timestamp: Date; fromRating?: number }
+interface Rating { score: number; context: string; timestamp: Date }
 
 interface InnerLoopState {
   phase: AlgorithmPhase
@@ -63,12 +36,6 @@ interface InnerLoopState {
   isc: string[]
   data: Record<string, string>
   startTime: number
-}
-
-interface Rating {
-  score: SignalRating
-  context: string
-  timestamp: Date
 }
 
 interface PAIState {
@@ -83,14 +50,9 @@ interface PAIState {
   ralphActive: boolean
 }
 
-// ── Damage Control ───────────────────────────────────────────────────────────
+// ── Damage Control Types ─────────────────────────────────────────────────────
 
-interface DamageRule {
-  pattern: string
-  reason: string
-  ask?: boolean
-}
-
+interface DamageRule { pattern: string; reason: string; ask?: boolean }
 interface DamageRules {
   bashToolPatterns: DamageRule[]
   zeroAccessPaths: string[]
@@ -98,492 +60,332 @@ interface DamageRules {
   noDeletePaths: string[]
 }
 
-function loadDamageRules(cwd: string): DamageRules {
-  const defaults: DamageRules = {
-    bashToolPatterns: [],
-    zeroAccessPaths: [],
-    readOnlyPaths: [],
-    noDeletePaths: [],
-  }
+const EMPTY_RULES: DamageRules = { bashToolPatterns: [], zeroAccessPaths: [], readOnlyPaths: [], noDeletePaths: [] }
 
-  // Try loading from project, then from package
+function loadDamageRules(cwd: string): DamageRules {
   const candidates = [
     path.join(cwd, '.pi', 'damage-control-rules.yaml'),
     path.join(cwd, 'damage-control-rules.yaml'),
     path.join(__dirname, '..', 'damage-control-rules.yaml'),
   ]
-
-  for (const candidate of candidates) {
+  for (const f of candidates) {
     try {
-      if (fs.existsSync(candidate)) {
-        const content = fs.readFileSync(candidate, 'utf8')
-        return parseSimpleYaml(content)
+      if (!fs.existsSync(f)) continue
+      const raw = YAML.load(fs.readFileSync(f, 'utf8')) as Partial<DamageRules>
+      return {
+        bashToolPatterns: raw.bashToolPatterns || [],
+        zeroAccessPaths: raw.zeroAccessPaths || [],
+        readOnlyPaths: raw.readOnlyPaths || [],
+        noDeletePaths: raw.noDeletePaths || [],
       }
-    } catch {}
+    } catch { /* skip bad files */ }
   }
-
-  return defaults
+  return EMPTY_RULES
 }
 
-function parseSimpleYaml(content: string): DamageRules {
-  const rules: DamageRules = {
-    bashToolPatterns: [],
-    zeroAccessPaths: [],
-    readOnlyPaths: [],
-    noDeletePaths: [],
+// Single canonical path match: normalize both sides, use startsWith for dirs, exact basename for globs
+function isPathMatch(target: string, pattern: string, cwd: string): boolean {
+  const expanded = pattern.startsWith('~') ? path.join(os.homedir(), pattern.slice(1)) : pattern
+  const norm = path.normalize(expanded).replace(/\\/g, '/')
+  const abs = path.normalize(path.isAbsolute(target) ? target : path.resolve(cwd, target)).replace(/\\/g, '/')
+
+  // Directory pattern: target must be inside it
+  if (norm.endsWith('/')) return abs.startsWith(norm) || abs.startsWith(norm.slice(0, -1))
+
+  // Glob pattern: convert * to regex, match against basename and full path
+  if (norm.includes('*')) {
+    const re = new RegExp('^' + norm.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
+    return re.test(path.basename(abs)) || re.test(abs)
   }
 
-  let currentSection = ''
-  let currentItem: Partial<DamageRule> = {}
-
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-
-    // Section headers
-    if (trimmed === 'bashToolPatterns:') { currentSection = 'bash'; continue }
-    if (trimmed === 'zeroAccessPaths:') { currentSection = 'zero'; continue }
-    if (trimmed === 'readOnlyPaths:') { currentSection = 'readonly'; continue }
-    if (trimmed === 'noDeletePaths:') { currentSection = 'nodelete'; continue }
-
-    if (currentSection === 'bash') {
-      const patternMatch = trimmed.match(/^-?\s*pattern:\s*'(.+)'$/)
-      const reasonMatch = trimmed.match(/^reason:\s*(.+)$/)
-      const askMatch = trimmed.match(/^ask:\s*(true|false)$/)
-
-      if (patternMatch) {
-        if (currentItem.pattern) {
-          rules.bashToolPatterns.push(currentItem as DamageRule)
-        }
-        currentItem = { pattern: patternMatch[1] }
-      } else if (reasonMatch && currentItem.pattern) {
-        currentItem.reason = reasonMatch[1]
-      } else if (askMatch && currentItem.pattern) {
-        currentItem.ask = askMatch[1] === 'true'
-      }
-    } else {
-      const pathMatch = trimmed.match(/^-\s+"?([^"]+)"?$/) || trimmed.match(/^-\s+(.+)$/)
-      if (pathMatch) {
-        const p = pathMatch[1].trim().replace(/^"/, '').replace(/"$/, '')
-        if (currentSection === 'zero') rules.zeroAccessPaths.push(p)
-        else if (currentSection === 'readonly') rules.readOnlyPaths.push(p)
-        else if (currentSection === 'nodelete') rules.noDeletePaths.push(p)
-      }
-    }
-  }
-  // Flush last item
-  if (currentItem.pattern && currentItem.reason) {
-    rules.bashToolPatterns.push(currentItem as DamageRule)
-  }
-
-  return rules
+  // Exact: match basename or full path
+  return path.basename(abs) === norm || abs.endsWith('/' + norm)
 }
 
-function isPathMatch(targetPath: string, pattern: string, cwd: string): boolean {
-  const resolvedPattern = pattern.startsWith('~')
-    ? path.join(os.homedir(), pattern.slice(1))
-    : pattern
+// ── Templates (external JSON, fallback to built-in) ──────────────────────────
 
-  if (resolvedPattern.endsWith('/')) {
-    const abs = path.isAbsolute(resolvedPattern)
-      ? resolvedPattern
-      : path.resolve(cwd, resolvedPattern)
-    return targetPath.startsWith(abs)
+interface Template { mission: string; goals: string[]; challenges: string[] }
+
+function loadTemplates(): Record<string, Template> {
+  // Try external file first
+  const ext = path.join(__dirname, '..', 'templates.json')
+  try {
+    if (fs.existsSync(ext)) return JSON.parse(fs.readFileSync(ext, 'utf8'))
+  } catch { /* fall through */ }
+
+  return {
+    trading: {
+      mission: 'Build a profitable algorithmic trading system',
+      goals: ['Develop and backtest core strategy', 'Achieve >55% win rate on paper trades', 'Deploy live with risk management', 'Maintain Sharpe ratio >1.5'],
+      challenges: ['Overfitting risk on historical data', 'Execution latency in live markets'],
+    },
+    saas: {
+      mission: 'Launch a production SaaS product',
+      goals: ['Ship MVP with auth, billing, and core feature', 'Acquire first 10 paying users', 'Achieve <2s p95 page load', 'Set up CI/CD and monitoring'],
+      challenges: ['Scope creep', 'Premature optimization'],
+    },
+    devops: {
+      mission: 'Build reliable infrastructure and deployment pipeline',
+      goals: ['Automate deployments with zero downtime', 'Set up monitoring and alerting', 'Achieve 99.9% uptime SLA', 'Document runbooks for on-call'],
+      challenges: ['Alert fatigue', 'Configuration drift'],
+    },
+    research: {
+      mission: 'Complete deep research project with actionable findings',
+      goals: ['Define research questions and scope', 'Collect and analyze primary sources', 'Synthesize findings into report', 'Present recommendations'],
+      challenges: ['Source reliability', 'Scope management'],
+    },
+    agent: {
+      mission: 'Build and ship a production AI agent',
+      goals: ['Define agent capabilities and constraints', 'Implement tool use and error handling', 'Test with adversarial inputs', 'Deploy with monitoring and kill switch'],
+      challenges: ['Prompt injection risk', 'Cost control', 'Hallucination detection'],
+    },
   }
+}
 
-  const regexStr = resolvedPattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*')
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-  const regex = new RegExp(`(^|/)${regexStr}($|/)`)
-  const rel = path.relative(cwd, targetPath)
-  return regex.test(targetPath) || regex.test(rel) || targetPath.includes(resolvedPattern)
+function persist(pi: ExtensionAPI, key: string, data: Record<string, unknown>) {
+  pi.appendEntry(key, { ...data, ts: new Date().toISOString() })
 }
 
 // ── Extension ────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
   const state: PAIState = {
-    mission: null,
-    goals: new Map(),
-    challenges: new Map(),
-    learnings: [],
-    ratings: [],
-    innerLoop: null,
-    iterationCount: 0,
-    ralphIteration: 0,
-    ralphActive: false,
+    mission: null, goals: new Map(), challenges: new Map(),
+    learnings: [], ratings: [], innerLoop: null,
+    iterationCount: 0, ralphIteration: 0, ralphActive: false,
   }
-
-  let rules: DamageRules = {
-    bashToolPatterns: [],
-    zeroAccessPaths: [],
-    readOnlyPaths: [],
-    noDeletePaths: [],
-  }
-
+  let rules: DamageRules = EMPTY_RULES
   let widgetCtx: ExtensionContext | null = null
+  const PHASES: AlgorithmPhase[] = ['OBSERVE', 'THINK', 'PLAN', 'DEFINE', 'EXECUTE', 'MEASURE', 'LEARN']
+  const EFFORTS: EffortLevel[] = ['instant', 'fast', 'standard', 'extended', 'deep']
 
-  // ── Widget ───────────────────────────────────────────────────────────────
+  function notify(msg: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') {
+    widgetCtx?.ui.notify(msg, type)
+  }
+
+  // ── Widget ─────────────────────────────────────────────────────────────
 
   function updateWidget() {
     if (!widgetCtx?.hasUI) return
-
     widgetCtx.ui.setWidget('pai-status', (_tui: any, theme: any) => ({
       render(width: number): string[] {
         const lines: string[] = []
-
         if (!state.mission) {
           lines.push(theme.fg('dim', '  π-PAI: /pai mission <statement> to begin'))
           return lines
         }
 
-        const missionTrunc = state.mission.length > width - 20
-          ? state.mission.slice(0, width - 23) + '...'
-          : state.mission
-        lines.push(theme.fg('accent', '  🎯 ') + theme.fg('success', missionTrunc))
+        const m = state.mission.length > width - 20 ? state.mission.slice(0, width - 23) + '...' : state.mission
+        lines.push(theme.fg('accent', '  🎯 ') + theme.fg('success', m))
 
         const goals = Array.from(state.goals.values())
-        const active = goals.filter(g => g.status === 'active').length
-        const blocked = goals.filter(g => g.status === 'blocked').length
-        const completed = goals.filter(g => g.status === 'completed').length
-        const avgRating = state.ratings.length > 0
-          ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1)
-          : '—'
+        const a = goals.filter(g => g.status === 'active').length
+        const b = goals.filter(g => g.status === 'blocked').length
+        const c = goals.filter(g => g.status === 'completed').length
+        const avg = state.ratings.length ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : '—'
 
-        if (goals.length > 0 || state.ratings.length > 0) {
+        if (goals.length || state.ratings.length) {
           lines.push(
-            theme.fg('dim', '  Goals: ') +
-            theme.fg('success', `${active}⚡`) +
-            theme.fg('dim', ' ') +
-            theme.fg('warning', `${blocked}🚫`) +
-            theme.fg('dim', ' ') +
-            theme.fg('muted', `${completed}✓`) +
-            theme.fg('dim', ' │ ') +
-            theme.fg('accent', `${state.learnings.length} learnings`) +
-            theme.fg('dim', ' │ ') +
-            theme.fg('accent', `⭐${avgRating}`) +
-            theme.fg('dim', ` (${state.ratings.length})`)
+            theme.fg('dim', '  Goals: ') + theme.fg('success', `${a}⚡`) + ' ' +
+            theme.fg('warning', `${b}🚫`) + ' ' + theme.fg('muted', `${c}✓`) +
+            theme.fg('dim', ' │ ') + theme.fg('accent', `${state.learnings.length} learnings`) +
+            theme.fg('dim', ' │ ⭐') + theme.fg('accent', `${avg}`) + theme.fg('dim', ` (${state.ratings.length})`)
           )
         }
 
         if (state.innerLoop) {
-          const phases: AlgorithmPhase[] = ['OBSERVE', 'THINK', 'PLAN', 'DEFINE', 'EXECUTE', 'MEASURE', 'LEARN']
-          const idx = phases.indexOf(state.innerLoop.phase)
-          const bar = phases.map((_, i) => {
-            if (i < idx) return theme.fg('success', '●')
-            if (i === idx) return theme.fg('accent', '◉')
-            return theme.fg('dim', '○')
-          }).join(' ')
+          const idx = PHASES.indexOf(state.innerLoop.phase)
+          const bar = PHASES.map((_, i) => i < idx ? theme.fg('success', '●') : i === idx ? theme.fg('accent', '◉') : theme.fg('dim', '○')).join(' ')
           const elapsed = Math.round((Date.now() - state.innerLoop.startTime) / 1000)
-          lines.push(
-            theme.fg('dim', '  Loop: ') + bar +
-            theme.fg('dim', ` [${state.innerLoop.phase}]`) +
-            theme.fg('dim', ` ${state.innerLoop.effort}`) +
-            theme.fg('dim', ` ${elapsed}s`)
-          )
+          lines.push(theme.fg('dim', '  Loop: ') + bar + theme.fg('dim', ` [${state.innerLoop.phase}] ${state.innerLoop.effort} ${elapsed}s`))
         }
 
-        if (state.ralphActive) {
-          lines.push(
-            theme.fg('warning', `  🔄 Ralph #${state.ralphIteration}`) +
-            theme.fg('dim', ' running...')
-          )
-        }
-
+        if (state.ralphActive) lines.push(theme.fg('warning', `  🔄 Ralph #${state.ralphIteration}`) + theme.fg('dim', ' running...'))
         return lines
       },
       invalidate() {},
     }))
   }
 
-  // ── /pai command ─────────────────────────────────────────────────────────
+  // ── /pai subcommand dispatch table ─────────────────────────────────────
 
-  // ── Templates ─────────────────────────────────────────────────────────
+  const paiCommands: Record<string, (rest: string, ctx: ExtensionContext) => void> = {
+    mission(rest, ctx) {
+      if (!rest) { notify('Usage: /pai mission <statement>', 'error'); return }
+      state.mission = rest
+      persist(pi, 'pai-mission', { mission: rest })
+      notify(`🎯 Mission: ${rest}`, 'success')
+      updateWidget()
+    },
 
-  const templates: Record<string, { mission: string; goals: string[]; challenges: string[] }> = {
-    trading: {
-      mission: 'Build a profitable algorithmic trading system',
-      goals: [
-        'Develop and backtest core strategy',
-        'Achieve >55% win rate on paper trades',
-        'Deploy live with risk management',
-        'Maintain Sharpe ratio >1.5',
-      ],
-      challenges: ['Overfitting risk on historical data', 'Execution latency in live markets'],
+    goal(rest) {
+      if (!rest) { notify('Usage: /pai goal <title>', 'error'); return }
+      const id = `g${state.goals.size}`
+      state.goals.set(id, { id, title: rest, status: 'active', priority: 'p1', isc: [] })
+      persist(pi, 'pai-goal', { id, title: rest, status: 'active' })
+      notify(`✅ Goal ${id}: ${rest}`, 'success')
+      updateWidget()
     },
-    saas: {
-      mission: 'Launch a production SaaS product',
-      goals: [
-        'Ship MVP with auth, billing, and core feature',
-        'Acquire first 10 paying users',
-        'Achieve <2s p95 page load',
-        'Set up CI/CD and monitoring',
-      ],
-      challenges: ['Scope creep', 'Premature optimization'],
+
+    done(rest) {
+      const goal = state.goals.get(rest.trim())
+      if (!goal) { notify(`Goal "${rest.trim()}" not found`, 'error'); return }
+      goal.status = 'completed'
+      persist(pi, 'pai-goal-done', { goalId: rest.trim() })
+      notify(`🎉 Completed: ${goal.title}`, 'success')
+      updateWidget()
     },
-    devops: {
-      mission: 'Build reliable infrastructure and deployment pipeline',
-      goals: [
-        'Automate deployments with zero downtime',
-        'Set up monitoring and alerting',
-        'Achieve 99.9% uptime SLA',
-        'Document runbooks for on-call',
-      ],
-      challenges: ['Alert fatigue', 'Configuration drift'],
+
+    block(rest) {
+      const goal = state.goals.get(rest.trim())
+      if (!goal) { notify(`Goal "${rest.trim()}" not found`, 'error'); return }
+      goal.status = 'blocked'
+      persist(pi, 'pai-goal-blocked', { goalId: rest.trim() })
+      notify(`🚫 Blocked: ${goal.title}`, 'warning')
+      updateWidget()
     },
-    research: {
-      mission: 'Complete deep research project with actionable findings',
-      goals: [
-        'Define research questions and scope',
-        'Collect and analyze primary sources',
-        'Synthesize findings into report',
-        'Present recommendations',
-      ],
-      challenges: ['Source reliability', 'Scope management'],
+
+    challenge(rest) {
+      if (!rest) { notify('Usage: /pai challenge <description>', 'error'); return }
+      const id = `c${state.challenges.size}`
+      state.challenges.set(id, { id, title: rest, severity: 'medium', affectedGoals: [] })
+      persist(pi, 'pai-challenge', { id, title: rest })
+      notify(`⚠️ Challenge ${id}: ${rest}`, 'warning')
+      updateWidget()
     },
-    agent: {
-      mission: 'Build and ship a production AI agent',
-      goals: [
-        'Define agent capabilities and constraints',
-        'Implement tool use and error handling',
-        'Test with adversarial inputs',
-        'Deploy with monitoring and kill switch',
-      ],
-      challenges: ['Prompt injection risk', 'Cost control', 'Hallucination detection'],
+
+    learn(rest) {
+      if (!rest) { notify('Usage: /pai learn <insight>', 'error'); return }
+      state.learnings.push({ insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date() })
+      persist(pi, 'pai-learning', { insight: rest, category: 'domain' })
+      notify(`📚 Learning: ${rest}`, 'success')
+      updateWidget()
+    },
+
+    loop(rest) {
+      const goal = rest || state.mission || 'unnamed'
+      state.innerLoop = { phase: 'OBSERVE', goal, effort: 'standard', isc: [], data: {}, startTime: Date.now() }
+      notify(`🔄 Algorithm started: ${goal} [OBSERVE]`, 'info')
+      updateWidget()
+    },
+
+    effort(rest) {
+      if (!state.innerLoop) { notify('No active loop', 'error'); return }
+      const level = rest.toLowerCase() as EffortLevel
+      if (!EFFORTS.includes(level)) { notify(`Usage: /pai effort ${EFFORTS.join('|')}`, 'error'); return }
+      state.innerLoop.effort = level
+      notify(`⚡ Effort: ${level}`, 'info')
+      updateWidget()
+    },
+
+    isc(rest) {
+      if (!state.innerLoop) { notify('No active loop', 'error'); return }
+      if (!rest) { notify('Usage: /pai isc <8-12 word testable criterion>', 'error'); return }
+      state.innerLoop.isc.push(rest)
+      persist(pi, 'pai-isc', { criterion: rest, phase: state.innerLoop.phase })
+      notify(`📋 ISC-${state.innerLoop.isc.length}: ${rest}`, 'success')
+      updateWidget()
+    },
+
+    next(rest) {
+      if (!state.innerLoop) { notify('No active loop. /pai loop <goal>', 'error'); return }
+      if (rest) state.innerLoop.data[state.innerLoop.phase] = rest
+      const idx = PHASES.indexOf(state.innerLoop.phase)
+
+      if (idx < PHASES.length - 1) {
+        state.innerLoop.phase = PHASES[idx + 1]
+        notify(`→ ${state.innerLoop.phase}`, 'info')
+      } else {
+        state.iterationCount++
+        const elapsed = Math.round((Date.now() - state.innerLoop.startTime) / 1000)
+        persist(pi, 'pai-loop-complete', {
+          goal: state.innerLoop.goal, iteration: state.iterationCount,
+          effort: state.innerLoop.effort, isc: state.innerLoop.isc, data: state.innerLoop.data, elapsed,
+        })
+        notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'success')
+        state.innerLoop = null
+      }
+      updateWidget()
+    },
+
+    template(rest) {
+      const templates = loadTemplates()
+      const name = rest.trim().toLowerCase()
+      if (!name || !templates[name]) { notify(`Templates: ${Object.keys(templates).join(', ')}`, 'info'); return }
+      const t = templates[name]
+      state.mission = t.mission
+      persist(pi, 'pai-mission', { mission: t.mission, template: name })
+      for (const title of t.goals) {
+        const id = `g${state.goals.size}`
+        state.goals.set(id, { id, title, status: 'active', priority: 'p1', isc: [] })
+        persist(pi, 'pai-goal', { id, title, status: 'active' })
+      }
+      for (const title of t.challenges) {
+        const id = `c${state.challenges.size}`
+        state.challenges.set(id, { id, title, severity: 'medium', affectedGoals: [] })
+        persist(pi, 'pai-challenge', { id, title })
+      }
+      notify(`📋 Template "${name}": ${t.goals.length} goals, ${t.challenges.length} challenges`, 'success')
+      updateWidget()
+    },
+
+    reset() {
+      state.mission = null; state.goals.clear(); state.challenges.clear()
+      state.learnings = []; state.ratings = []; state.innerLoop = null
+      state.iterationCount = 0; state.ralphIteration = 0; state.ralphActive = false
+      persist(pi, 'pai-reset', {})
+      notify('🗑️ PAI state reset', 'warning')
+      updateWidget()
+    },
+
+    status() {
+      const goals = Array.from(state.goals.values())
+      const challenges = Array.from(state.challenges.values())
+      const avg = state.ratings.length ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : 'none'
+
+      let r = `# PAI Status\n\n**Mission:** ${state.mission || 'Not set'}\n`
+      r += `**Iterations:** ${state.iterationCount} | **Avg Rating:** ${avg} (${state.ratings.length} signals)\n\n`
+
+      r += `## Goals (${goals.length})\n`
+      for (const g of goals) {
+        const icon = g.status === 'completed' ? '✅' : g.status === 'blocked' ? '🚫' : '🎯'
+        r += `- ${icon} **${g.id}** ${g.title} (${g.status})\n`
+      }
+
+      r += `\n## Challenges (${challenges.length})\n`
+      for (const c of challenges) r += `- ⚠️ **${c.id}** ${c.title}\n`
+
+      r += `\n## Recent Learnings\n`
+      for (const l of state.learnings.slice(-5)) r += `- 📚 [${l.category}] ${l.insight}${l.fromRating ? ` (⭐${l.fromRating})` : ''}\n`
+
+      if (state.innerLoop) {
+        r += `\n## Active Loop\n**Phase:** ${state.innerLoop.phase} | **Effort:** ${state.innerLoop.effort} | **Goal:** ${state.innerLoop.goal}\n`
+        for (const [i, c] of state.innerLoop.isc.entries()) r += `- ISC-${i + 1}: ${c}\n`
+      }
+
+      r += `\n## Damage Control\n${rules.bashToolPatterns.length} bash | ${rules.zeroAccessPaths.length} zero-access | ${rules.readOnlyPaths.length} read-only | ${rules.noDeletePaths.length} no-delete\n`
+      pi.sendMessage({ content: r, display: true }, { deliverAs: 'followUp', triggerTurn: false })
     },
   }
 
+  // ── /pai command ───────────────────────────────────────────────────────
+
   pi.registerCommand('pai', {
-    description: 'PAI system: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status',
+    description: 'PAI: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status',
     handler: async (args, ctx) => {
       widgetCtx = ctx
       const parts = (args || '').trim().split(/\s+/)
-      const subcmd = parts[0]?.toLowerCase()
+      const sub = parts[0]?.toLowerCase()
       const rest = parts.slice(1).join(' ')
-
-      switch (subcmd) {
-        case 'mission': {
-          if (!rest) { ctx.ui.notify('Usage: /pai mission <statement>', 'error'); return }
-          state.mission = rest
-          pi.appendEntry('pai-mission', { mission: rest, ts: new Date().toISOString() })
-          ctx.ui.notify(`🎯 Mission: ${rest}`, 'success')
-          updateWidget()
-          break
-        }
-
-        case 'goal': {
-          if (!rest) { ctx.ui.notify('Usage: /pai goal <title>', 'error'); return }
-          const id = `g${state.goals.size}`
-          const goal: Goal = { id, title: rest, status: 'active', priority: 'p1', isc: [] }
-          state.goals.set(id, goal)
-          pi.appendEntry('pai-goal', { ...goal, ts: new Date().toISOString() })
-          ctx.ui.notify(`✅ Goal ${id}: ${rest}`, 'success')
-          updateWidget()
-          break
-        }
-
-        case 'done': {
-          const gid = rest.trim()
-          const goal = state.goals.get(gid)
-          if (!goal) { ctx.ui.notify(`Goal "${gid}" not found`, 'error'); return }
-          goal.status = 'completed'
-          pi.appendEntry('pai-goal-done', { goalId: gid, ts: new Date().toISOString() })
-          ctx.ui.notify(`🎉 Completed: ${goal.title}`, 'success')
-          updateWidget()
-          break
-        }
-
-        case 'challenge': {
-          if (!rest) { ctx.ui.notify('Usage: /pai challenge <description>', 'error'); return }
-          const cid = `c${state.challenges.size}`
-          const ch: Challenge = { id: cid, title: rest, severity: 'medium', affectedGoals: [] }
-          state.challenges.set(cid, ch)
-          pi.appendEntry('pai-challenge', { ...ch, ts: new Date().toISOString() })
-          ctx.ui.notify(`⚠️ Challenge ${cid}: ${rest}`, 'warning')
-          updateWidget()
-          break
-        }
-
-        case 'learn': {
-          if (!rest) { ctx.ui.notify('Usage: /pai learn <insight>', 'error'); return }
-          const l: Learning = { insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date() }
-          state.learnings.push(l)
-          pi.appendEntry('pai-learning', { insight: rest, category: 'domain', ts: new Date().toISOString() })
-          ctx.ui.notify(`📚 Learning: ${rest}`, 'success')
-          updateWidget()
-          break
-        }
-
-        case 'loop': {
-          const loopGoal = rest || state.mission || 'unnamed'
-          state.innerLoop = {
-            phase: 'OBSERVE',
-            goal: loopGoal,
-            effort: 'standard',
-            isc: [],
-            data: {},
-            startTime: Date.now(),
-          }
-          ctx.ui.notify(`🔄 Algorithm started: ${loopGoal} [OBSERVE]`, 'info')
-          updateWidget()
-          break
-        }
-
-        case 'effort': {
-          if (!state.innerLoop) { ctx.ui.notify('No active loop', 'error'); return }
-          const level = rest.toLowerCase() as EffortLevel
-          const valid: EffortLevel[] = ['instant', 'fast', 'standard', 'extended', 'deep']
-          if (!valid.includes(level)) {
-            ctx.ui.notify(`Usage: /pai effort ${valid.join('|')}`, 'error')
-            return
-          }
-          state.innerLoop.effort = level
-          ctx.ui.notify(`⚡ Effort: ${level}`, 'info')
-          updateWidget()
-          break
-        }
-
-        case 'isc': {
-          if (!state.innerLoop) { ctx.ui.notify('No active loop', 'error'); return }
-          if (!rest) { ctx.ui.notify('Usage: /pai isc <8-12 word testable criterion>', 'error'); return }
-          state.innerLoop.isc.push(rest)
-          pi.appendEntry('pai-isc', { criterion: rest, phase: state.innerLoop.phase, ts: new Date().toISOString() })
-          ctx.ui.notify(`📋 ISC-${state.innerLoop.isc.length}: ${rest}`, 'success')
-          break
-        }
-
-        case 'next': {
-          if (!state.innerLoop) { ctx.ui.notify('No active loop. /pai loop <goal>', 'error'); return }
-          const phases: AlgorithmPhase[] = ['OBSERVE', 'THINK', 'PLAN', 'DEFINE', 'EXECUTE', 'MEASURE', 'LEARN']
-          const idx = phases.indexOf(state.innerLoop.phase)
-          if (rest) state.innerLoop.data[state.innerLoop.phase] = rest
-
-          if (idx < phases.length - 1) {
-            state.innerLoop.phase = phases[idx + 1]
-            ctx.ui.notify(`→ ${state.innerLoop.phase}`, 'info')
-          } else {
-            state.iterationCount++
-            const elapsed = Math.round((Date.now() - state.innerLoop.startTime) / 1000)
-            pi.appendEntry('pai-loop-complete', {
-              goal: state.innerLoop.goal,
-              iteration: state.iterationCount,
-              effort: state.innerLoop.effort,
-              isc: state.innerLoop.isc,
-              data: state.innerLoop.data,
-              elapsed,
-              ts: new Date().toISOString(),
-            })
-            ctx.ui.notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'success')
-            state.innerLoop = null
-          }
-          updateWidget()
-          break
-        }
-
-        case 'status': {
-          const goals = Array.from(state.goals.values())
-          const challenges = Array.from(state.challenges.values())
-          const avgRating = state.ratings.length > 0
-            ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1)
-            : 'none'
-
-          let report = `# PAI Status\n\n`
-          report += `**Mission:** ${state.mission || 'Not set'}\n`
-          report += `**Iterations:** ${state.iterationCount} | **Avg Rating:** ${avgRating} (${state.ratings.length} signals)\n\n`
-
-          report += `## Goals (${goals.length})\n`
-          goals.forEach(g => {
-            const icon = g.status === 'completed' ? '✅' : g.status === 'blocked' ? '🚫' : '🎯'
-            report += `- ${icon} **${g.id}** ${g.title} (${g.status}, ${g.priority})\n`
-            if (g.isc?.length) g.isc.forEach(c => { report += `  - ISC: ${c}\n` })
-          })
-
-          report += `\n## Challenges (${challenges.length})\n`
-          challenges.forEach(c => { report += `- ⚠️ **${c.id}** ${c.title} (${c.severity})\n` })
-
-          report += `\n## Recent Learnings\n`
-          state.learnings.slice(-5).forEach(l => {
-            report += `- 📚 [${l.category}] ${l.insight}${l.fromRating ? ` (from ⭐${l.fromRating})` : ''}\n`
-          })
-
-          if (state.innerLoop) {
-            report += `\n## Active Loop\n`
-            report += `**Phase:** ${state.innerLoop.phase} | **Effort:** ${state.innerLoop.effort} | **Goal:** ${state.innerLoop.goal}\n`
-            if (state.innerLoop.isc.length) {
-              report += `**ISC:**\n`
-              state.innerLoop.isc.forEach((c, i) => { report += `- ISC-${i + 1}: ${c}\n` })
-            }
-          }
-
-          report += `\n## Damage Control\n`
-          report += `${rules.bashToolPatterns.length} bash patterns | ${rules.zeroAccessPaths.length} zero-access | ${rules.readOnlyPaths.length} read-only | ${rules.noDeletePaths.length} no-delete\n`
-
-          pi.sendMessage({ content: report, display: true }, { deliverAs: 'followUp', triggerTurn: false })
-          break
-        }
-
-        case 'block': {
-          const gid = rest.trim()
-          const goal = state.goals.get(gid)
-          if (!goal) { ctx.ui.notify(`Goal "${gid}" not found`, 'error'); return }
-          goal.status = 'blocked'
-          pi.appendEntry('pai-goal-blocked', { goalId: gid, ts: new Date().toISOString() })
-          ctx.ui.notify(`🚫 Blocked: ${goal.title}`, 'warning')
-          updateWidget()
-          break
-        }
-
-        case 'template': {
-          const name = rest.trim().toLowerCase()
-          const available = Object.keys(templates)
-          if (!name || !templates[name]) {
-            ctx.ui.notify(`Templates: ${available.join(', ')}`, 'info')
-            return
-          }
-          const t = templates[name]
-          state.mission = t.mission
-          pi.appendEntry('pai-mission', { mission: t.mission, template: name, ts: new Date().toISOString() })
-          for (const title of t.goals) {
-            const id = `g${state.goals.size}`
-            const goal: Goal = { id, title, status: 'active', priority: 'p1', isc: [] }
-            state.goals.set(id, goal)
-            pi.appendEntry('pai-goal', { ...goal, ts: new Date().toISOString() })
-          }
-          for (const title of t.challenges) {
-            const cid = `c${state.challenges.size}`
-            const ch: Challenge = { id: cid, title, severity: 'medium', affectedGoals: [] }
-            state.challenges.set(cid, ch)
-            pi.appendEntry('pai-challenge', { ...ch, ts: new Date().toISOString() })
-          }
-          ctx.ui.notify(`📋 Template "${name}": ${t.goals.length} goals, ${t.challenges.length} challenges`, 'success')
-          updateWidget()
-          break
-        }
-
-        case 'reset': {
-          state.mission = null
-          state.goals.clear()
-          state.challenges.clear()
-          state.learnings = []
-          state.ratings = []
-          state.innerLoop = null
-          state.iterationCount = 0
-          state.ralphIteration = 0
-          state.ralphActive = false
-          pi.appendEntry('pai-reset', { ts: new Date().toISOString() })
-          ctx.ui.notify('🗑️ PAI state reset', 'warning')
-          updateWidget()
-          break
-        }
-
-        default:
-          ctx.ui.notify('/pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status', 'info')
-      }
+      const fn = paiCommands[sub]
+      if (fn) fn(rest, ctx)
+      else notify(`/pai ${Object.keys(paiCommands).join('|')}`, 'info')
     },
   })
 
-  // ── /rate command (Miessler's rating capture) ────────────────────────────
+  // ── /rate ──────────────────────────────────────────────────────────────
 
   pi.registerCommand('rate', {
     description: 'Rate last output 1-10: /rate <score> [context]',
@@ -591,38 +393,26 @@ export default function (pi: ExtensionAPI) {
       widgetCtx = ctx
       const parts = (args || '').trim().split(/\s+/)
       const score = parseInt(parts[0], 10)
-      const context = parts.slice(1).join(' ') || ''
+      const context = parts.slice(1).join(' ')
 
-      if (isNaN(score) || score < 1 || score > 10) {
-        ctx.ui.notify('Usage: /rate <1-10> [context]', 'error')
-        return
-      }
+      if (isNaN(score) || score < 1 || score > 10) { notify('Usage: /rate <1-10> [context]', 'error'); return }
 
-      const rating: Rating = { score: score as SignalRating, context, timestamp: new Date() }
-      state.ratings.push(rating)
-      pi.appendEntry('pai-rating', { score, context, ts: new Date().toISOString() })
+      state.ratings.push({ score, context, timestamp: new Date() })
+      persist(pi, 'pai-rating', { score, context })
 
       if (score <= 3) {
-        const learning: Learning = {
-          insight: `Low rating (${score}): ${context || 'output quality below expectations'}`,
-          confidence: 0.9,
-          category: 'algorithm',
-          timestamp: new Date(),
-          fromRating: score,
-        }
-        state.learnings.push(learning)
-        pi.appendEntry('pai-learning', { ...learning, ts: new Date().toISOString() })
-        ctx.ui.notify(`⭐${score} — Learning captured from low rating`, 'warning')
-      } else if (score >= 8) {
-        ctx.ui.notify(`⭐${score} — Excellent!`, 'success')
+        const l: Learning = { insight: `Low rating (${score}): ${context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score }
+        state.learnings.push(l)
+        persist(pi, 'pai-learning', { insight: l.insight, category: 'algorithm', fromRating: score })
+        notify(`⭐${score} — Learning captured`, 'warning')
       } else {
-        ctx.ui.notify(`⭐${score}`, 'info')
+        notify(`⭐${score}${score >= 8 ? ' — Excellent!' : ''}`, score >= 8 ? 'success' : 'info')
       }
       updateWidget()
     },
   })
 
-  // ── /ralph command ───────────────────────────────────────────────────────
+  // ── /ralph ─────────────────────────────────────────────────────────────
 
   pi.registerCommand('ralph', {
     description: 'Ralph Wiggum iteration: /ralph <task> or /ralph stop',
@@ -632,20 +422,18 @@ export default function (pi: ExtensionAPI) {
 
       if (task.toLowerCase() === 'stop') {
         state.ralphActive = false
-        ctx.ui.notify(`🛑 Ralph stopped after ${state.ralphIteration} iterations`, 'warning')
+        notify(`🛑 Ralph stopped after ${state.ralphIteration} iterations`, 'warning')
         updateWidget()
         return
       }
-
-      if (!task) { ctx.ui.notify('Usage: /ralph <task> or /ralph stop', 'error'); return }
+      if (!task) { notify('Usage: /ralph <task> or /ralph stop', 'error'); return }
 
       state.ralphActive = true
       state.ralphIteration = 0
-      ctx.ui.notify(`🔄 Ralph starting: ${task}`, 'info')
+      notify(`🔄 Ralph starting: ${task}`, 'info')
       updateWidget()
-
       pi.sendMessage({
-        content: `[Ralph Wiggum Iteration #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. When done, say "RALPH_DONE". If not done, describe what remains.`,
+        content: `[Ralph #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. Say "RALPH_DONE" when finished.`,
         display: true,
       }, { deliverAs: 'followUp', triggerTurn: true })
     },
@@ -653,162 +441,116 @@ export default function (pi: ExtensionAPI) {
 
   pi.on('message_end', async (event, ctx) => {
     if (!state.ralphActive) return
-    if (state.ralphIteration >= 50) {
-      state.ralphActive = false
-      ctx.ui.notify(`🛑 Ralph hit 50 iterations`, 'warning')
-      updateWidget()
-      return
-    }
-
-    const text = (event as any)?.text || ''
-    if (text.includes('RALPH_DONE')) {
-      state.ralphActive = false
-      ctx.ui.notify(`✅ Ralph done in ${state.ralphIteration} iterations`, 'success')
-      updateWidget()
-      return
-    }
-
-    pi.sendMessage({
-      content: `[Ralph #${++state.ralphIteration}] Continue. Review git history for context. Say "RALPH_DONE" when finished.`,
-      display: true,
-    }, { deliverAs: 'followUp', triggerTurn: true })
+    if (state.ralphIteration >= 50) { state.ralphActive = false; notify('🛑 Ralph: 50 limit', 'warning'); updateWidget(); return }
+    if (((event as any)?.text || '').includes('RALPH_DONE')) { state.ralphActive = false; notify(`✅ Ralph done in ${state.ralphIteration}`, 'success'); updateWidget(); return }
+    pi.sendMessage({ content: `[Ralph #${++state.ralphIteration}] Continue. Say "RALPH_DONE" when finished.`, display: true }, { deliverAs: 'followUp', triggerTurn: true })
     updateWidget()
   })
 
-  // ── Tools ────────────────────────────────────────────────────────────────
+  // ── Tools ──────────────────────────────────────────────────────────────
 
   pi.registerTool({
     name: 'pai_status',
-    description: 'Get PAI system status: mission, goals, challenges, learnings, loop phase, ratings.',
+    description: 'Get PAI status: mission, goals, challenges, learnings, loop, ratings.',
     parameters: Type.Object({}),
     execute: async () => ({
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          mission: state.mission,
-          goals: Array.from(state.goals.values()),
-          challenges: Array.from(state.challenges.values()),
-          learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category })),
-          innerLoop: state.innerLoop ? { phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal, isc: state.innerLoop.isc } : null,
-          iterations: state.iterationCount,
-          avgRating: state.ratings.length ? +(state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : null,
-          ratingCount: state.ratings.length,
-        }, null, 2),
-      }],
+      content: [{ type: 'text', text: JSON.stringify({
+        mission: state.mission, goals: Array.from(state.goals.values()),
+        challenges: Array.from(state.challenges.values()),
+        learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category })),
+        innerLoop: state.innerLoop ? { phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal, isc: state.innerLoop.isc } : null,
+        iterations: state.iterationCount,
+        avgRating: state.ratings.length ? +(state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : null,
+        ratingCount: state.ratings.length,
+      }, null, 2) }],
     }),
   })
 
   pi.registerTool({
     name: 'pai_learn',
-    description: 'Record a learning/insight into PAI for future reference.',
+    description: 'Record a learning/insight into PAI.',
     parameters: Type.Object({
       insight: Type.String({ description: 'The learning or insight' }),
       category: Type.Optional(Type.String({ description: 'algorithm|system|domain|process' })),
-      confidence: Type.Optional(Type.Number({ description: '0-1, default 0.8' })),
+      confidence: Type.Optional(Type.Number({ description: '0-1' })),
     }),
     execute: async (_callId, args) => {
-      const l: Learning = {
-        insight: args.insight,
-        confidence: args.confidence ?? 0.8,
-        category: (args.category as Learning['category']) || 'domain',
-        timestamp: new Date(),
-      }
-      state.learnings.push(l)
-      pi.appendEntry('pai-learning', { ...l, ts: new Date().toISOString() })
+      state.learnings.push({ insight: args.insight, confidence: args.confidence ?? 0.8, category: args.category || 'domain', timestamp: new Date() })
+      persist(pi, 'pai-learning', { insight: args.insight, category: args.category || 'domain' })
       updateWidget()
-      return { content: [{ type: 'text', text: `Learning [${l.category}]: ${args.insight}` }] }
+      return { content: [{ type: 'text', text: `Learning [${args.category || 'domain'}]: ${args.insight}` }] }
     },
   })
 
   pi.registerTool({
     name: 'pai_rate',
-    description: 'Rate the quality of the last output (1-10). Low ratings auto-capture learnings.',
+    description: 'Rate output quality 1-10. Low ratings auto-capture learnings.',
     parameters: Type.Object({
       score: Type.Number({ description: 'Rating 1-10' }),
-      context: Type.Optional(Type.String({ description: 'Why this rating' })),
+      context: Type.Optional(Type.String({ description: 'Why' })),
     }),
     execute: async (_callId, args) => {
-      const score = Math.max(1, Math.min(10, Math.round(args.score))) as SignalRating
-      const rating: Rating = { score, context: args.context || '', timestamp: new Date() }
-      state.ratings.push(rating)
-      pi.appendEntry('pai-rating', { score, context: args.context, ts: new Date().toISOString() })
-
+      const score = Math.max(1, Math.min(10, Math.round(args.score)))
+      state.ratings.push({ score, context: args.context || '', timestamp: new Date() })
+      persist(pi, 'pai-rating', { score, context: args.context })
       if (score <= 3) {
-        const l: Learning = {
-          insight: `Low rating (${score}): ${args.context || 'below expectations'}`,
-          confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score,
-        }
-        state.learnings.push(l)
-        pi.appendEntry('pai-learning', { ...l, ts: new Date().toISOString() })
+        state.learnings.push({ insight: `Low rating (${score}): ${args.context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score })
+        persist(pi, 'pai-learning', { insight: `Low rating (${score})`, category: 'algorithm', fromRating: score })
       }
       updateWidget()
       return { content: [{ type: 'text', text: `Rated ⭐${score}${args.context ? ': ' + args.context : ''}` }] }
     },
   })
 
-  // ── Damage Control — tool_call interception ──────────────────────────────
+  // ── Damage Control ─────────────────────────────────────────────────────
 
   pi.on('tool_call', async (event, ctx) => {
     const { isToolCallEventType } = await import('@mariozechner/pi-coding-agent')
 
-    // Bash patterns
     if (isToolCallEventType('bash', event)) {
-      const command = event.input.command || ''
+      const cmd = event.input.command || ''
 
       for (const rule of rules.bashToolPatterns) {
         try {
-          const regex = new RegExp(rule.pattern)
-          if (regex.test(command)) {
+          if (new RegExp(rule.pattern).test(cmd)) {
             if (rule.ask) {
-              const ok = await ctx.ui.confirm('🛡️ PAI Damage Control',
-                `${rule.reason}\n\nCommand: ${command}\n\nAllow?`, { timeout: 30000 })
-              if (!ok) {
-                pi.appendEntry('pai-dc-blocked', { command, reason: rule.reason, action: 'user_denied' })
-                ctx.abort()
-                return { block: true, reason: `🛑 PAI: ${rule.reason}. DO NOT retry or work around.` }
-              }
+              const ok = await ctx.ui.confirm('🛡️ PAI', `${rule.reason}\n\n${cmd}\n\nAllow?`, { timeout: 30000 })
+              if (!ok) { persist(pi, 'pai-dc', { cmd, reason: rule.reason, action: 'denied' }); ctx.abort(); return { block: true, reason: `🛑 ${rule.reason}. DO NOT retry.` } }
               return { block: false }
             }
-            pi.appendEntry('pai-dc-blocked', { command, reason: rule.reason, action: 'auto' })
-            ctx.ui.notify(`🛡️ Blocked: ${rule.reason}`, 'error')
+            persist(pi, 'pai-dc', { cmd, reason: rule.reason, action: 'blocked' })
             ctx.abort()
-            return { block: true, reason: `🛑 PAI: ${rule.reason}. DO NOT retry or work around.` }
+            return { block: true, reason: `🛑 ${rule.reason}. DO NOT retry.` }
           }
-        } catch {}
+        } catch { /* bad regex, skip */ }
       }
 
-      // Zero-access in bash commands
       for (const zap of rules.zeroAccessPaths) {
-        const clean = zap.replace('~/', '').replace(/^\*/, '')
-        if (clean && command.includes(clean)) {
-          pi.appendEntry('pai-dc-blocked', { command, reason: `zero-access: ${zap}`, action: 'auto' })
+        const clean = zap.replace(/^~\//, '').replace(/^\*/, '')
+        if (clean && cmd.includes(clean)) {
+          persist(pi, 'pai-dc', { cmd, reason: `zero-access: ${zap}`, action: 'blocked' })
           ctx.abort()
-          return { block: true, reason: `🛑 PAI: zero-access path ${zap}. DO NOT retry.` }
+          return { block: true, reason: `🛑 zero-access: ${zap}. DO NOT retry.` }
         }
       }
     }
 
-    // File tool path checks
     if (isToolCallEventType('read', event) || isToolCallEventType('write', event) || isToolCallEventType('edit', event)) {
       const filePath = event.input.path || ''
       const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(ctx.cwd, filePath)
 
       for (const zap of rules.zeroAccessPaths) {
         if (isPathMatch(resolved, zap, ctx.cwd)) {
-          pi.appendEntry('pai-dc-blocked', { path: filePath, reason: `zero-access: ${zap}`, action: 'auto' })
-          ctx.ui.notify(`🛡️ Blocked: ${zap}`, 'error')
           ctx.abort()
-          return { block: true, reason: `🛑 PAI: zero-access ${zap}. DO NOT retry.` }
+          return { block: true, reason: `🛑 zero-access: ${zap}. DO NOT retry.` }
         }
       }
 
-      // Read-only check for write/edit
       if (isToolCallEventType('write', event) || isToolCallEventType('edit', event)) {
         for (const rop of rules.readOnlyPaths) {
           if (isPathMatch(resolved, rop, ctx.cwd)) {
-            pi.appendEntry('pai-dc-blocked', { path: filePath, reason: `read-only: ${rop}`, action: 'auto' })
             ctx.abort()
-            return { block: true, reason: `🛑 PAI: read-only path ${rop}. DO NOT modify.` }
+            return { block: true, reason: `🛑 read-only: ${rop}. DO NOT modify.` }
           }
         }
       }
@@ -817,19 +559,13 @@ export default function (pi: ExtensionAPI) {
     return { block: false }
   })
 
-  // ── Session lifecycle ────────────────────────────────────────────────────
+  // ── Session lifecycle ──────────────────────────────────────────────────
 
   pi.on('session_start', async (_event, ctx) => {
     widgetCtx = ctx
     rules = loadDamageRules(ctx.cwd)
-    const ruleCount = rules.bashToolPatterns.length + rules.zeroAccessPaths.length +
-      rules.readOnlyPaths.length + rules.noDeletePaths.length
     updateWidget()
-
-    if (ruleCount > 0) {
-      ctx.ui.notify(`🧠 π-PAI v3 | ${ruleCount} damage-control rules | /pai /ralph /rate`, 'info')
-    } else {
-      ctx.ui.notify('🧠 π-PAI v3 | /pai /ralph /rate', 'info')
-    }
+    const n = rules.bashToolPatterns.length + rules.zeroAccessPaths.length + rules.readOnlyPaths.length + rules.noDeletePaths.length
+    ctx.ui.notify(`🧠 π-PAI v3.1 | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
   })
 }
