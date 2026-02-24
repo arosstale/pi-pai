@@ -556,6 +556,21 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
+    // noDeletePaths: block bash rm/del commands targeting protected paths
+    if (isToolCallEventType('bash', event)) {
+      const cmd = event.input.command || ''
+      if (/\b(rm|del|rmdir|Remove-Item)\b/i.test(cmd)) {
+        for (const ndp of rules.noDeletePaths) {
+          const clean = ndp.replace(/^~\//, '').replace(/^\*/, '')
+          if (clean && cmd.includes(clean)) {
+            persist(pi, 'pai-dc', { cmd, reason: `no-delete: ${ndp}`, action: 'blocked' })
+            ctx.abort()
+            return { block: true, reason: `🛑 no-delete: ${ndp}. DO NOT retry.` }
+          }
+        }
+      }
+    }
+
     return { block: false }
   })
 
