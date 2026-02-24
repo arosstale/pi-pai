@@ -1,0 +1,68 @@
+{
+  "trading": {
+    "mission": "Build a profitable algorithmic trading system",
+    "goals": [
+      "Develop and backtest core strategy",
+      "Achieve >55% win rate on paper trades",
+      "Deploy live with risk management",
+      "Maintain Sharpe ratio >1.5"
+    ],
+    "challenges": [
+      "Overfitting risk on historical data",
+      "Execution latency in live markets"
+    ]
+  },
+  "saas": {
+    "mission": "Launch a production SaaS product",
+    "goals": [
+      "Ship MVP with auth, billing, and core feature",
+      "Acquire first 10 paying users",
+      "Achieve <2s p95 page load",
+      "Set up CI/CD and monitoring"
+    ],
+    "challenges": [
+      "Scope creep",
+      "Premature optimization"
+    ]
+  },
+  "devops": {
+    "mission": "Build reliable infrastructure and deployment pipeline",
+    "goals": [
+      "Automate deployments with zero downtime",
+      "Set up monitoring and alerting",
+      "Achieve 99.9% uptime SLA",
+      "Document runbooks for on-call"
+    ],
+    "challenges": [
+      "Alert fatigue",
+      "Configuration drift"
+    ]
+  },
+  "research": {
+    "mission": "Complete deep research project with actionable findings",
+    "goals": [
+      "Define research questions and scope",
+      "Collect and analyze primary sources",
+      "Synthesize findings into report",
+      "Present recommendations"
+    ],
+    "challenges": [
+      "Source reliability",
+      "Scope management"
+    ]
+  },
+  "agent": {
+    "mission": "Build and ship a production AI agent",
+    "goals": [
+      "Define agent capabilities and constraints",
+      "Implement tool use and error handling",
+      "Test with adversarial inputs",
+      "Deploy with monitoring and kill switch"
+    ],
+    "challenges": [
+      "Prompt injection risk",
+      "Cost control",
+      "Hallucination detection"
+    ]
+  }
+}
