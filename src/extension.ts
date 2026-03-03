@@ -161,7 +161,7 @@ export default function (pi: ExtensionAPI) {
   const PHASES: AlgorithmPhase[] = ['OBSERVE', 'THINK', 'PLAN', 'DEFINE', 'EXECUTE', 'MEASURE', 'LEARN']
   const EFFORTS: EffortLevel[] = ['instant', 'fast', 'standard', 'extended', 'deep']
 
-  function notify(msg: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') {
+  function notify(msg: string, type: 'error' | 'warning' | 'info' = 'info') {
     widgetCtx?.ui.notify(msg, type)
   }
 
@@ -216,7 +216,7 @@ export default function (pi: ExtensionAPI) {
       if (!rest) { notify('Usage: /pai mission <statement>', 'error'); return }
       state.mission = rest
       persist(pi, 'pai-mission', { mission: rest })
-      notify(`🎯 Mission: ${rest}`, 'success')
+      notify(`🎯 Mission: ${rest}`, 'info')
       updateWidget()
     },
 
@@ -225,7 +225,7 @@ export default function (pi: ExtensionAPI) {
       const id = `g${state.goals.size}`
       state.goals.set(id, { id, title: rest, status: 'active', priority: 'p1', isc: [] })
       persist(pi, 'pai-goal', { id, title: rest, status: 'active' })
-      notify(`✅ Goal ${id}: ${rest}`, 'success')
+      notify(`✅ Goal ${id}: ${rest}`, 'info')
       updateWidget()
     },
 
@@ -234,7 +234,7 @@ export default function (pi: ExtensionAPI) {
       if (!goal) { notify(`Goal "${rest.trim()}" not found`, 'error'); return }
       goal.status = 'completed'
       persist(pi, 'pai-goal-done', { goalId: rest.trim() })
-      notify(`🎉 Completed: ${goal.title}`, 'success')
+      notify(`🎉 Completed: ${goal.title}`, 'info')
       updateWidget()
     },
 
@@ -260,7 +260,7 @@ export default function (pi: ExtensionAPI) {
       if (!rest) { notify('Usage: /pai learn <insight>', 'error'); return }
       state.learnings.push({ insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date() })
       persist(pi, 'pai-learning', { insight: rest, category: 'domain' })
-      notify(`📚 Learning: ${rest}`, 'success')
+      notify(`📚 Learning: ${rest}`, 'info')
       updateWidget()
     },
 
@@ -285,7 +285,7 @@ export default function (pi: ExtensionAPI) {
       if (!rest) { notify('Usage: /pai isc <8-12 word testable criterion>', 'error'); return }
       state.innerLoop.isc.push(rest)
       persist(pi, 'pai-isc', { criterion: rest, phase: state.innerLoop.phase })
-      notify(`📋 ISC-${state.innerLoop.isc.length}: ${rest}`, 'success')
+      notify(`📋 ISC-${state.innerLoop.isc.length}: ${rest}`, 'info')
       updateWidget()
     },
 
@@ -304,7 +304,7 @@ export default function (pi: ExtensionAPI) {
           goal: state.innerLoop.goal, iteration: state.iterationCount,
           effort: state.innerLoop.effort, isc: state.innerLoop.isc, data: state.innerLoop.data, elapsed,
         })
-        notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'success')
+        notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'info')
         state.innerLoop = null
       }
       updateWidget()
@@ -327,7 +327,7 @@ export default function (pi: ExtensionAPI) {
         state.challenges.set(id, { id, title, severity: 'medium', affectedGoals: [] })
         persist(pi, 'pai-challenge', { id, title })
       }
-      notify(`📋 Template "${name}": ${t.goals.length} goals, ${t.challenges.length} challenges`, 'success')
+      notify(`📋 Template "${name}": ${t.goals.length} goals, ${t.challenges.length} challenges`, 'info')
       updateWidget()
     },
 
@@ -366,7 +366,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       r += `\n## Damage Control\n${rules.bashToolPatterns.length} bash | ${rules.zeroAccessPaths.length} zero-access | ${rules.readOnlyPaths.length} read-only | ${rules.noDeletePaths.length} no-delete\n`
-      pi.sendMessage({ content: r, display: true }, { deliverAs: 'followUp', triggerTurn: false })
+      pi.sendMessage({ customType: 'pai-status', content: r, display: true, details: undefined }, { triggerTurn: false })
     },
   }
 
@@ -406,7 +406,7 @@ export default function (pi: ExtensionAPI) {
         persist(pi, 'pai-learning', { insight: l.insight, category: 'algorithm', fromRating: score })
         notify(`⭐${score} — Learning captured`, 'warning')
       } else {
-        notify(`⭐${score}${score >= 8 ? ' — Excellent!' : ''}`, score >= 8 ? 'success' : 'info')
+        notify(`⭐${score}${score >= 8 ? ' — Excellent!' : ''}`, 'info')
       }
       updateWidget()
     },
@@ -432,18 +432,18 @@ export default function (pi: ExtensionAPI) {
       state.ralphIteration = 0
       notify(`🔄 Ralph starting: ${task}`, 'info')
       updateWidget()
-      pi.sendMessage({
-        content: `[Ralph #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. Say "RALPH_DONE" when finished.`,
-        display: true,
-      }, { deliverAs: 'followUp', triggerTurn: true })
+      pi.sendMessage(
+        { customType: 'pai-ralph', content: `[Ralph #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. Say "RALPH_DONE" when finished.`, display: true, details: undefined },
+        { triggerTurn: true },
+      )
     },
   })
 
   pi.on('message_end', async (event, ctx) => {
     if (!state.ralphActive) return
     if (state.ralphIteration >= 50) { state.ralphActive = false; notify('🛑 Ralph: 50 limit', 'warning'); updateWidget(); return }
-    if (((event as any)?.text || '').includes('RALPH_DONE')) { state.ralphActive = false; notify(`✅ Ralph done in ${state.ralphIteration}`, 'success'); updateWidget(); return }
-    pi.sendMessage({ content: `[Ralph #${++state.ralphIteration}] Continue. Say "RALPH_DONE" when finished.`, display: true }, { deliverAs: 'followUp', triggerTurn: true })
+    if (((event as any)?.text || '').includes('RALPH_DONE')) { state.ralphActive = false; notify(`✅ Ralph done in ${state.ralphIteration}`, 'info'); updateWidget(); return }
+    pi.sendMessage({ customType: 'pai-ralph', content: `[Ralph #${++state.ralphIteration}] Continue. Say "RALPH_DONE" when finished.`, display: true, details: undefined }, { triggerTurn: true })
     updateWidget()
   })
 
@@ -451,10 +451,12 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'pai_status',
+    label: 'PAI Status',
     description: 'Get PAI status: mission, goals, challenges, learnings, loop, ratings.',
     parameters: Type.Object({}),
     execute: async () => ({
-      content: [{ type: 'text', text: JSON.stringify({
+      details: undefined,
+      content: [{ type: 'text' as const, text: JSON.stringify({
         mission: state.mission, goals: Array.from(state.goals.values()),
         challenges: Array.from(state.challenges.values()),
         learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category })),
@@ -468,6 +470,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: 'pai_learn',
+    label: 'PAI Learn',
     description: 'Record a learning/insight into PAI.',
     parameters: Type.Object({
       insight: Type.String({ description: 'The learning or insight' }),
@@ -478,12 +481,13 @@ export default function (pi: ExtensionAPI) {
       state.learnings.push({ insight: args.insight, confidence: args.confidence ?? 0.8, category: args.category || 'domain', timestamp: new Date() })
       persist(pi, 'pai-learning', { insight: args.insight, category: args.category || 'domain' })
       updateWidget()
-      return { content: [{ type: 'text', text: `Learning [${args.category || 'domain'}]: ${args.insight}` }] }
+      return { details: undefined, content: [{ type: 'text' as const, text: `Learning [${args.category || 'domain'}]: ${args.insight}` }] }
     },
   })
 
   pi.registerTool({
     name: 'pai_rate',
+    label: 'PAI Rate',
     description: 'Rate output quality 1-10. Low ratings auto-capture learnings.',
     parameters: Type.Object({
       score: Type.Number({ description: 'Rating 1-10' }),
@@ -498,7 +502,7 @@ export default function (pi: ExtensionAPI) {
         persist(pi, 'pai-learning', { insight: `Low rating (${score})`, category: 'algorithm', fromRating: score })
       }
       updateWidget()
-      return { content: [{ type: 'text', text: `Rated ⭐${score}${args.context ? ': ' + args.context : ''}` }] }
+      return { details: undefined, content: [{ type: 'text' as const, text: `Rated ⭐${score}${args.context ? ': ' + args.context : ''}` }] }
     },
   })
 
