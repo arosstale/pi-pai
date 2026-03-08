@@ -535,7 +535,12 @@ export default function (pi: ExtensionAPI) {
 
       for (const zap of rules.zeroAccessPaths) {
         const clean = zap.replace(/^~\//, '').replace(/^\*/, '')
-        if (clean && cmd.includes(clean)) {
+        if (!clean) continue
+        // Require path context: slash, backslash, or whitespace before the pattern.
+        // Prevents false positives: "process.env" matching ".env", "Object.keys" matching ".key"
+        const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const pathRegex = new RegExp('(^|[/\\\\\\s])' + escaped + '(\\b|[/\\\\\\s]|$)')
+        if (pathRegex.test(cmd)) {
           persist(pi, 'pai-dc', { cmd, reason: `zero-access: ${zap}`, action: 'blocked' })
           ctx.abort()
           return { block: true, reason: `🛑 zero-access: ${zap}. DO NOT retry.` }

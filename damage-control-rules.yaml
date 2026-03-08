@@ -382,11 +382,12 @@ bashToolPatterns:
 zeroAccessPaths:
   # ---------------------------------------------------------------------------
   # ENVIRONMENT FILES (HIGH RISK - contain secrets)
+  # Uses path-separator prefix to avoid false positives on substrings
+  # like "process.env", "pi-envman", "@artale/pi-env"
   # ---------------------------------------------------------------------------
-  - ".env"
-  - ".env.*"
-  - ".env*.local"
-  - "*.env"
+  - "/.env"
+  - "/.env."
+  - "/.env.local"
 
   # ---------------------------------------------------------------------------
   # SSH KEYS AND CONFIG

@@ -1,0 +1,1 @@
+v3.0.4: fix zeroAccessPaths false positives on bash substring matching
