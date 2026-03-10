@@ -1,16 +1,21 @@
 /**
- * π-PAI v3.1 — Personal AI Infrastructure Extension for Pi
+ * π-PAI v4.0 — Personal AI Infrastructure Extension for Pi
  *
- * Merges:
- * 1. Daniel Miessler's PAI Algorithm (7-phase, ISC, effort levels, learnings)
- * 2. disler's damage-control (97+ bash patterns via YAML)
- * 3. disler's pi-vs-claude-code extension patterns (widgets, tool_call hooks)
+ * Synced with Miessler's PAI v4.0.3 algorithm:
+ * - Algorithm: OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY (v4 loop)
+ * - ISC decomposition (Ideal Success Criteria)
+ * - Ratings + sentiment tracking with trend analysis
+ * - Agent persona dispatch (architect, pentester, designer, etc.)
+ * - Plans directory convention (.pi/plans/)
+ * - Self-evolution trigger (learning pattern detection)
  *
- * v3.1: Carmack review — killed hand-rolled YAML parser (→ js-yaml),
- * split /pai switch into dispatch table, externalized templates to JSON,
- * fixed isPathMatch to single canonical strategy.
+ * Also includes:
+ * - Ralph Wiggum deterministic iteration engine
+ * - Damage control (YAML-based path/command guards)
+ * - Templates (trading, saas, devops, research, agent)
  *
- * v3.1.1: Fix Ralph event handler — typed event access, guard null mission in widget.
+ * v4.0: Steal-list from Miessler's PAI — ratings/sentiment, agent personas,
+ * plans convention, self-evolution trigger, algorithm sync to v4.0.3.
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
@@ -22,14 +27,15 @@ import YAML from 'js-yaml'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AlgorithmPhase = 'OBSERVE' | 'THINK' | 'PLAN' | 'DEFINE' | 'EXECUTE' | 'MEASURE' | 'LEARN'
+type AlgorithmPhase = 'OBSERVE' | 'PLAN' | 'DECIDE' | 'EXECUTE' | 'VERIFY'
 type EffortLevel = 'instant' | 'fast' | 'standard' | 'extended' | 'deep'
 type GoalStatus = 'active' | 'blocked' | 'completed' | 'paused'
+type Sentiment = 'positive' | 'neutral' | 'negative'
 
 interface Goal { id: string; title: string; status: GoalStatus; priority: string; isc?: string[] }
 interface Challenge { id: string; title: string; severity: string; affectedGoals: string[] }
-interface Learning { insight: string; confidence: number; category: string; timestamp: Date; fromRating?: number }
-interface Rating { score: number; context: string; timestamp: Date }
+interface Learning { insight: string; confidence: number; category: string; timestamp: Date; fromRating?: number; sentiment?: Sentiment }
+interface Rating { score: number; context: string; timestamp: Date; sentiment: Sentiment }
 
 interface InnerLoopState {
   phase: AlgorithmPhase
@@ -52,16 +58,52 @@ interface PAIState {
   ralphActive: boolean
 }
 
+// ── Agent Personas (Steal #2 from Miessler's PAI) ────────────────────────────
+
+interface AgentPersona { name: string; role: string; systemPrompt: string }
+
+const AGENT_PERSONAS: Record<string, AgentPersona> = {
+  architect: {
+    name: 'Architect',
+    role: 'System design and architecture decisions',
+    systemPrompt: 'You are a senior system architect. Focus on: scalability, separation of concerns, API design, data flow, and failure modes. Propose 2-3 options with tradeoffs. Be opinionated — recommend the best option. Reference established patterns (hexagonal, event-driven, CQRS) when relevant.',
+  },
+  engineer: {
+    name: 'Engineer',
+    role: 'Implementation and code quality',
+    systemPrompt: 'You are a senior software engineer. Write production-quality code: proper error handling, types, tests, and documentation. Follow the codebase conventions. No shortcuts — if something needs a test, write the test.',
+  },
+  pentester: {
+    name: 'Pentester',
+    role: 'Security review and vulnerability assessment',
+    systemPrompt: 'You are a penetration tester and security researcher. Review code for: injection attacks (SQL, command, prompt), auth bypass, SSRF, path traversal, insecure deserialization, secrets in code, and dependency vulnerabilities. Report findings with severity (Critical/High/Medium/Low), exploit scenario, and remediation.',
+  },
+  designer: {
+    name: 'Designer',
+    role: 'UX/UI design and user experience',
+    systemPrompt: 'You are a senior product designer. Focus on: information architecture, visual hierarchy, accessibility (WCAG 2.1 AA), responsive design, and interaction patterns. Propose designs with rationale. Consider edge cases: empty states, error states, loading states, overflow.',
+  },
+  reviewer: {
+    name: 'Code Reviewer',
+    role: 'Code review and quality gates',
+    systemPrompt: 'You are a meticulous code reviewer. Check: correctness, edge cases, error handling, naming, complexity, test coverage, and performance. Categorize findings as P1 (must fix), P2 (should fix), P3 (nit). Be direct — if code is wrong, say so.',
+  },
+  researcher: {
+    name: 'Researcher',
+    role: 'Deep investigation and analysis',
+    systemPrompt: 'You are a thorough researcher. Investigate topics systematically: define the question, gather evidence, analyze findings, synthesize conclusions. Cite sources. Flag uncertainty. Separate facts from opinions.',
+  },
+  qa: {
+    name: 'QA Tester',
+    role: 'Quality assurance and test planning',
+    systemPrompt: 'You are a QA engineer. Think adversarially: what can go wrong? Create test plans covering: happy paths, edge cases, error paths, boundary values, concurrency, and regression. Write concrete test cases with expected results.',
+  },
+}
+
 // ── Damage Control Types ─────────────────────────────────────────────────────
 
 interface DamageRule { pattern: string; reason: string; ask?: boolean }
-interface DamageRules {
-  bashToolPatterns: DamageRule[]
-  zeroAccessPaths: string[]
-  readOnlyPaths: string[]
-  noDeletePaths: string[]
-}
-
+interface DamageRules { bashToolPatterns: DamageRule[]; zeroAccessPaths: string[]; readOnlyPaths: string[]; noDeletePaths: string[] }
 const EMPTY_RULES: DamageRules = { bashToolPatterns: [], zeroAccessPaths: [], readOnlyPaths: [], noDeletePaths: [] }
 
 function loadDamageRules(cwd: string): DamageRules {
@@ -74,74 +116,84 @@ function loadDamageRules(cwd: string): DamageRules {
     try {
       if (!fs.existsSync(f)) continue
       const raw = YAML.load(fs.readFileSync(f, 'utf8')) as Partial<DamageRules>
-      return {
-        bashToolPatterns: raw.bashToolPatterns || [],
-        zeroAccessPaths: raw.zeroAccessPaths || [],
-        readOnlyPaths: raw.readOnlyPaths || [],
-        noDeletePaths: raw.noDeletePaths || [],
-      }
+      return { bashToolPatterns: raw.bashToolPatterns || [], zeroAccessPaths: raw.zeroAccessPaths || [], readOnlyPaths: raw.readOnlyPaths || [], noDeletePaths: raw.noDeletePaths || [] }
     } catch { /* skip bad files */ }
   }
   return EMPTY_RULES
 }
 
-// Single canonical path match: normalize both sides, use startsWith for dirs, exact basename for globs
 function isPathMatch(target: string, pattern: string, cwd: string): boolean {
   const expanded = pattern.startsWith('~') ? path.join(os.homedir(), pattern.slice(1)) : pattern
   const norm = path.normalize(expanded).replace(/\\/g, '/')
   const abs = path.normalize(path.isAbsolute(target) ? target : path.resolve(cwd, target)).replace(/\\/g, '/')
-
-  // Directory pattern: target must be inside it
   if (norm.endsWith('/')) return abs.startsWith(norm) || abs.startsWith(norm.slice(0, -1))
-
-  // Glob pattern: convert * to regex, match against basename and full path
   if (norm.includes('*')) {
     const re = new RegExp('^' + norm.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
     return re.test(path.basename(abs)) || re.test(abs)
   }
-
-  // Exact: match basename or full path
   return path.basename(abs) === norm || abs.endsWith('/' + norm)
 }
 
-// ── Templates (external JSON, fallback to built-in) ──────────────────────────
+// ── Templates ────────────────────────────────────────────────────────────────
 
 interface Template { mission: string; goals: string[]; challenges: string[] }
 
 function loadTemplates(): Record<string, Template> {
-  // Try external file first
   const ext = path.join(__dirname, '..', 'templates.json')
-  try {
-    if (fs.existsSync(ext)) return JSON.parse(fs.readFileSync(ext, 'utf8'))
-  } catch { /* fall through */ }
-
+  try { if (fs.existsSync(ext)) return JSON.parse(fs.readFileSync(ext, 'utf8')) } catch { /* fall through */ }
   return {
-    trading: {
-      mission: 'Build a profitable algorithmic trading system',
-      goals: ['Develop and backtest core strategy', 'Achieve >55% win rate on paper trades', 'Deploy live with risk management', 'Maintain Sharpe ratio >1.5'],
-      challenges: ['Overfitting risk on historical data', 'Execution latency in live markets'],
-    },
-    saas: {
-      mission: 'Launch a production SaaS product',
-      goals: ['Ship MVP with auth, billing, and core feature', 'Acquire first 10 paying users', 'Achieve <2s p95 page load', 'Set up CI/CD and monitoring'],
-      challenges: ['Scope creep', 'Premature optimization'],
-    },
-    devops: {
-      mission: 'Build reliable infrastructure and deployment pipeline',
-      goals: ['Automate deployments with zero downtime', 'Set up monitoring and alerting', 'Achieve 99.9% uptime SLA', 'Document runbooks for on-call'],
-      challenges: ['Alert fatigue', 'Configuration drift'],
-    },
-    research: {
-      mission: 'Complete deep research project with actionable findings',
-      goals: ['Define research questions and scope', 'Collect and analyze primary sources', 'Synthesize findings into report', 'Present recommendations'],
-      challenges: ['Source reliability', 'Scope management'],
-    },
-    agent: {
-      mission: 'Build and ship a production AI agent',
-      goals: ['Define agent capabilities and constraints', 'Implement tool use and error handling', 'Test with adversarial inputs', 'Deploy with monitoring and kill switch'],
-      challenges: ['Prompt injection risk', 'Cost control', 'Hallucination detection'],
-    },
+    trading: { mission: 'Build a profitable algorithmic trading system', goals: ['Develop and backtest core strategy', 'Achieve >55% win rate on paper trades', 'Deploy live with risk management', 'Maintain Sharpe ratio >1.5'], challenges: ['Overfitting risk on historical data', 'Execution latency in live markets'] },
+    saas: { mission: 'Launch a production SaaS product', goals: ['Ship MVP with auth, billing, and core feature', 'Acquire first 10 paying users', 'Achieve <2s p95 page load', 'Set up CI/CD and monitoring'], challenges: ['Scope creep', 'Premature optimization'] },
+    devops: { mission: 'Build reliable infrastructure and deployment pipeline', goals: ['Automate deployments with zero downtime', 'Set up monitoring and alerting', 'Achieve 99.9% uptime SLA', 'Document runbooks for on-call'], challenges: ['Alert fatigue', 'Configuration drift'] },
+    research: { mission: 'Complete deep research project with actionable findings', goals: ['Define research questions and scope', 'Collect and analyze primary sources', 'Synthesize findings into report', 'Present recommendations'], challenges: ['Source reliability', 'Scope management'] },
+    agent: { mission: 'Build and ship a production AI agent', goals: ['Define agent capabilities and constraints', 'Implement tool use and error handling', 'Test with adversarial inputs', 'Deploy with monitoring and kill switch'], challenges: ['Prompt injection risk', 'Cost control', 'Hallucination detection'] },
   }
+}
+
+// ── Sentiment Analysis (Steal #3) ────────────────────────────────────────────
+
+function inferSentiment(score: number, context: string): Sentiment {
+  if (score >= 7) return 'positive'
+  if (score <= 3) return 'negative'
+  const neg = /bad|broken|wrong|fail|slow|bug|crash|awful|terrible|worse|hate|frustrat/i
+  const pos = /great|fast|clean|nice|perfect|love|excellent|smooth|solid/i
+  if (neg.test(context)) return 'negative'
+  if (pos.test(context)) return 'positive'
+  return 'neutral'
+}
+
+function ratingTrend(ratings: Rating[], window: number = 5): { trend: 'improving' | 'declining' | 'stable'; avg: number; recent: number } {
+  const avg = ratings.length ? ratings.reduce((s, r) => s + r.score, 0) / ratings.length : 0
+  const recent = ratings.slice(-window)
+  const recentAvg = recent.length ? recent.reduce((s, r) => s + r.score, 0) / recent.length : 0
+  const delta = recentAvg - avg
+  return { trend: delta > 0.5 ? 'improving' : delta < -0.5 ? 'declining' : 'stable', avg: +avg.toFixed(1), recent: +recentAvg.toFixed(1) }
+}
+
+// ── Self-Evolution Trigger (Steal #4) ────────────────────────────────────────
+
+function detectRepeatingPatterns(learnings: Learning[]): string[] {
+  const counts = new Map<string, number>()
+  for (const l of learnings) {
+    // Normalize: lowercase, strip punctuation, take first 6 words
+    const key = l.insight.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).slice(0, 6).join(' ')
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return Array.from(counts.entries()).filter(([_, c]) => c >= 3).map(([k]) => k)
+}
+
+// ── Plans Directory (Steal #5) ───────────────────────────────────────────────
+
+function ensurePlansDir(cwd: string): string {
+  const plansDir = path.join(cwd, '.pi', 'plans')
+  if (!fs.existsSync(plansDir)) fs.mkdirSync(plansDir, { recursive: true })
+  return plansDir
+}
+
+function listPlans(cwd: string): string[] {
+  const dir = path.join(cwd, '.pi', 'plans')
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -160,7 +212,8 @@ export default function (pi: ExtensionAPI) {
   }
   let rules: DamageRules = EMPTY_RULES
   let widgetCtx: ExtensionContext | null = null
-  const PHASES: AlgorithmPhase[] = ['OBSERVE', 'THINK', 'PLAN', 'DEFINE', 'EXECUTE', 'MEASURE', 'LEARN']
+  // v4.0.3 algorithm: OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY
+  const PHASES: AlgorithmPhase[] = ['OBSERVE', 'PLAN', 'DECIDE', 'EXECUTE', 'VERIFY']
   const EFFORTS: EffortLevel[] = ['instant', 'fast', 'standard', 'extended', 'deep']
 
   function notify(msg: string, type: 'error' | 'warning' | 'info' = 'info') {
@@ -175,7 +228,7 @@ export default function (pi: ExtensionAPI) {
       render(width: number): string[] {
         const lines: string[] = []
         if (!state.mission) {
-          lines.push(theme.fg('dim', '  π-PAI: /pai mission <statement> to begin'))
+          lines.push(theme.fg('dim', '  π-PAI v4: /pai mission <statement> to begin'))
           return lines
         }
 
@@ -187,14 +240,16 @@ export default function (pi: ExtensionAPI) {
         const a = goals.filter(g => g.status === 'active').length
         const b = goals.filter(g => g.status === 'blocked').length
         const c = goals.filter(g => g.status === 'completed').length
-        const avg = state.ratings.length ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : '—'
+        const { trend, avg, recent } = ratingTrend(state.ratings)
+        const trendIcon = trend === 'improving' ? '📈' : trend === 'declining' ? '📉' : '➡️'
 
         if (goals.length || state.ratings.length) {
           lines.push(
             theme.fg('dim', '  Goals: ') + theme.fg('success', `${a}⚡`) + ' ' +
             theme.fg('warning', `${b}🚫`) + ' ' + theme.fg('muted', `${c}✓`) +
             theme.fg('dim', ' │ ') + theme.fg('accent', `${state.learnings.length} learnings`) +
-            theme.fg('dim', ' │ ⭐') + theme.fg('accent', `${avg}`) + theme.fg('dim', ` (${state.ratings.length})`)
+            theme.fg('dim', ' │ ⭐') + theme.fg('accent', `${avg}`) +
+            theme.fg('dim', ` ${trendIcon}${recent} (${state.ratings.length})`)
           )
         }
 
@@ -206,6 +261,11 @@ export default function (pi: ExtensionAPI) {
         }
 
         if (state.ralphActive) lines.push(theme.fg('warning', `  🔄 Ralph #${state.ralphIteration}`) + theme.fg('dim', ' running...'))
+
+        // Self-evolution warning
+        const patterns = detectRepeatingPatterns(state.learnings)
+        if (patterns.length) lines.push(theme.fg('warning', `  ⚠️ ${patterns.length} repeating pattern(s) — consider /pai evolve`))
+
         return lines
       },
       invalidate() {},
@@ -215,7 +275,7 @@ export default function (pi: ExtensionAPI) {
   // ── /pai subcommand dispatch table ─────────────────────────────────────
 
   const paiCommands: Record<string, (rest: string, ctx: ExtensionContext) => void> = {
-    mission(rest, ctx) {
+    mission(rest) {
       if (!rest) { notify('Usage: /pai mission <statement>', 'error'); return }
       state.mission = rest
       persist(pi, 'pai-mission', { mission: rest })
@@ -261,9 +321,15 @@ export default function (pi: ExtensionAPI) {
 
     learn(rest) {
       if (!rest) { notify('Usage: /pai learn <insight>', 'error'); return }
-      state.learnings.push({ insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date() })
-      persist(pi, 'pai-learning', { insight: rest, category: 'domain' })
+      const sentiment = inferSentiment(5, rest)
+      state.learnings.push({ insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date(), sentiment })
+      persist(pi, 'pai-learning', { insight: rest, category: 'domain', sentiment })
       notify(`📚 Learning: ${rest}`, 'info')
+
+      // Self-evolution trigger: check for repeating patterns
+      const patterns = detectRepeatingPatterns(state.learnings)
+      if (patterns.length) notify(`⚠️ ${patterns.length} pattern(s) repeating 3+ times — run /pai evolve to address`, 'warning')
+
       updateWidget()
     },
 
@@ -334,6 +400,76 @@ export default function (pi: ExtensionAPI) {
       updateWidget()
     },
 
+    // Steal #2: Agent Personas
+    agent(rest) {
+      const name = rest.trim().toLowerCase()
+      if (!name || !AGENT_PERSONAS[name]) {
+        const list = Object.entries(AGENT_PERSONAS).map(([k, v]) => `  ${k}: ${v.role}`).join('\n')
+        pi.sendMessage({ customType: 'pai-agents', content: `# Available Agent Personas\n\n${list}\n\nUsage: /pai agent <name> <task>`, display: true, details: undefined }, { triggerTurn: false })
+        return
+      }
+      const taskStart = rest.indexOf(' ')
+      const task = taskStart > 0 ? rest.slice(taskStart + 1).trim() : ''
+      if (!task) { notify(`Usage: /pai agent ${name} <task description>`, 'error'); return }
+      const persona = AGENT_PERSONAS[name]
+      pi.sendMessage({
+        customType: 'pai-agent-dispatch',
+        content: `# ${persona.name} Mode\n\n**System:** ${persona.systemPrompt}\n\n**Task:** ${task}`,
+        display: true,
+        details: undefined,
+      }, { triggerTurn: true })
+      notify(`🎭 ${persona.name}: ${task.slice(0, 60)}...`, 'info')
+    },
+
+    // Steal #5: Plans directory
+    plans(rest, ctx) {
+      const plans = listPlans(ctx.cwd)
+      if (!plans.length) {
+        notify('No plans in .pi/plans/ — use brainstorm skill to create one', 'info')
+        return
+      }
+      const list = plans.map(p => `- ${p}`).join('\n')
+      pi.sendMessage({ customType: 'pai-plans', content: `# Plans\n\n${list}\n\nPlans dir: .pi/plans/`, display: true, details: undefined }, { triggerTurn: false })
+    },
+
+    // Steal #4: Self-evolution
+    evolve() {
+      const patterns = detectRepeatingPatterns(state.learnings)
+      if (!patterns.length) { notify('No repeating patterns detected yet', 'info'); return }
+
+      const report = patterns.map((p, i) => `${i + 1}. "${p}" (3+ occurrences)`).join('\n')
+      const sentimentDist = { positive: 0, neutral: 0, negative: 0 }
+      for (const l of state.learnings) sentimentDist[l.sentiment || 'neutral']++
+
+      pi.sendMessage({
+        customType: 'pai-evolve',
+        content: `# Evolution Trigger Report\n\n## Repeating Learning Patterns\n${report}\n\n## Sentiment Distribution\n- Positive: ${sentimentDist.positive}\n- Neutral: ${sentimentDist.neutral}\n- Negative: ${sentimentDist.negative}\n\n## Recommended Actions\nThese patterns indicate recurring issues. Consider:\n1. **Run /gepa** on related skills to evolve them\n2. **Create a new skill** to address the pattern\n3. **Update AGENTS.md** with the learning\n\nUse \`pi-gepa\` extension for automated skill evolution.`,
+        display: true,
+        details: undefined,
+      }, { triggerTurn: false })
+    },
+
+    // Steal #3: Detailed trend report
+    trend() {
+      if (!state.ratings.length) { notify('No ratings yet — use /rate <1-10> after tasks', 'info'); return }
+
+      const { trend, avg, recent } = ratingTrend(state.ratings)
+      const sentimentDist = { positive: 0, neutral: 0, negative: 0 }
+      for (const r of state.ratings) sentimentDist[r.sentiment]++
+
+      const recentRatings = state.ratings.slice(-10).map(r => {
+        const icon = r.sentiment === 'positive' ? '😊' : r.sentiment === 'negative' ? '😞' : '😐'
+        return `- ⭐${r.score} ${icon} ${r.context || '(no context)'}`
+      }).join('\n')
+
+      pi.sendMessage({
+        customType: 'pai-trend',
+        content: `# Rating Trend\n\n**Overall:** ⭐${avg} (${state.ratings.length} ratings)\n**Recent (last 5):** ⭐${recent} ${trend === 'improving' ? '📈 Improving' : trend === 'declining' ? '📉 Declining' : '➡️ Stable'}\n\n## Sentiment\n- 😊 Positive: ${sentimentDist.positive}\n- 😐 Neutral: ${sentimentDist.neutral}\n- 😞 Negative: ${sentimentDist.negative}\n\n## Recent Ratings\n${recentRatings}`,
+        display: true,
+        details: undefined,
+      }, { triggerTurn: false })
+    },
+
     reset() {
       state.mission = null; state.goals.clear(); state.challenges.clear()
       state.learnings = []; state.ratings = []; state.innerLoop = null
@@ -343,13 +479,19 @@ export default function (pi: ExtensionAPI) {
       updateWidget()
     },
 
-    status() {
+    status(_rest, ctx) {
       const goals = Array.from(state.goals.values())
       const challenges = Array.from(state.challenges.values())
-      const avg = state.ratings.length ? (state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : 'none'
+      const { trend, avg, recent } = ratingTrend(state.ratings)
+      const trendIcon = trend === 'improving' ? '📈' : trend === 'declining' ? '📉' : '➡️'
+      const patterns = detectRepeatingPatterns(state.learnings)
+      const plans = listPlans(ctx.cwd)
 
-      let r = `# PAI Status\n\n**Mission:** ${state.mission || 'Not set'}\n`
-      r += `**Iterations:** ${state.iterationCount} | **Avg Rating:** ${avg} (${state.ratings.length} signals)\n\n`
+      let r = `# PAI Status (v4.0 — synced with Miessler v4.0.3)\n\n`
+      r += `**Mission:** ${state.mission || 'Not set'}\n`
+      r += `**Iterations:** ${state.iterationCount} | **Rating:** ⭐${avg} ${trendIcon}${recent} (${state.ratings.length} signals)\n`
+      if (patterns.length) r += `**⚠️ Repeating patterns:** ${patterns.length} — run /pai evolve\n`
+      r += '\n'
 
       r += `## Goals (${goals.length})\n`
       for (const g of goals) {
@@ -361,14 +503,24 @@ export default function (pi: ExtensionAPI) {
       for (const c of challenges) r += `- ⚠️ **${c.id}** ${c.title}\n`
 
       r += `\n## Recent Learnings\n`
-      for (const l of state.learnings.slice(-5)) r += `- 📚 [${l.category}] ${l.insight}${l.fromRating ? ` (⭐${l.fromRating})` : ''}\n`
+      for (const l of state.learnings.slice(-5)) {
+        const sIcon = l.sentiment === 'positive' ? '😊' : l.sentiment === 'negative' ? '😞' : '📚'
+        r += `- ${sIcon} [${l.category}] ${l.insight}${l.fromRating ? ` (⭐${l.fromRating})` : ''}\n`
+      }
 
       if (state.innerLoop) {
-        r += `\n## Active Loop\n**Phase:** ${state.innerLoop.phase} | **Effort:** ${state.innerLoop.effort} | **Goal:** ${state.innerLoop.goal}\n`
+        r += `\n## Active Loop (v4 Algorithm)\n`
+        r += `**Phase:** ${state.innerLoop.phase} | **Effort:** ${state.innerLoop.effort} | **Goal:** ${state.innerLoop.goal}\n`
+        r += `**Phases:** OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY\n`
         for (const [i, c] of state.innerLoop.isc.entries()) r += `- ISC-${i + 1}: ${c}\n`
       }
 
+      r += `\n## Agent Personas\n${Object.entries(AGENT_PERSONAS).map(([k, v]) => `- **${k}**: ${v.role}`).join('\n')}\n`
+
+      if (plans.length) r += `\n## Plans (.pi/plans/)\n${plans.slice(0, 5).map(p => `- ${p}`).join('\n')}\n`
+
       r += `\n## Damage Control\n${rules.bashToolPatterns.length} bash | ${rules.zeroAccessPaths.length} zero-access | ${rules.readOnlyPaths.length} read-only | ${rules.noDeletePaths.length} no-delete\n`
+
       pi.sendMessage({ customType: 'pai-status', content: r, display: true, details: undefined }, { triggerTurn: false })
     },
   }
@@ -376,9 +528,10 @@ export default function (pi: ExtensionAPI) {
   // ── /pai command ───────────────────────────────────────────────────────
 
   pi.registerCommand('pai', {
-    description: 'PAI: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|reset|status',
+    description: 'PAI v4: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|agent|plans|trend|evolve|reset|status',
     handler: async (args, ctx) => {
       widgetCtx = ctx
+      ensurePlansDir(ctx.cwd)
       const parts = (args || '').trim().split(/\s+/)
       const sub = parts[0]?.toLowerCase()
       const rest = parts.slice(1).join(' ')
@@ -388,10 +541,10 @@ export default function (pi: ExtensionAPI) {
     },
   })
 
-  // ── /rate ──────────────────────────────────────────────────────────────
+  // ── /rate (enhanced with sentiment) ────────────────────────────────────
 
   pi.registerCommand('rate', {
-    description: 'Rate last output 1-10: /rate <score> [context]',
+    description: 'Rate last output 1-10 with sentiment: /rate <score> [context]',
     handler: async (args, ctx) => {
       widgetCtx = ctx
       const parts = (args || '').trim().split(/\s+/)
@@ -400,16 +553,18 @@ export default function (pi: ExtensionAPI) {
 
       if (isNaN(score) || score < 1 || score > 10) { notify('Usage: /rate <1-10> [context]', 'error'); return }
 
-      state.ratings.push({ score, context, timestamp: new Date() })
-      persist(pi, 'pai-rating', { score, context })
+      const sentiment = inferSentiment(score, context)
+      state.ratings.push({ score, context, timestamp: new Date(), sentiment })
+      persist(pi, 'pai-rating', { score, context, sentiment })
 
       if (score <= 3) {
-        const l: Learning = { insight: `Low rating (${score}): ${context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score }
+        const l: Learning = { insight: `Low rating (${score}): ${context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score, sentiment: 'negative' }
         state.learnings.push(l)
-        persist(pi, 'pai-learning', { insight: l.insight, category: 'algorithm', fromRating: score })
-        notify(`⭐${score} — Learning captured`, 'warning')
+        persist(pi, 'pai-learning', { insight: l.insight, category: 'algorithm', fromRating: score, sentiment: 'negative' })
+        notify(`⭐${score} 😞 — Learning captured`, 'warning')
       } else {
-        notify(`⭐${score}${score >= 8 ? ' — Excellent!' : ''}`, 'info')
+        const sIcon = sentiment === 'positive' ? '😊' : '😐'
+        notify(`⭐${score} ${sIcon}${score >= 8 ? ' — Excellent!' : ''}`, 'info')
       }
       updateWidget()
     },
@@ -422,7 +577,6 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       widgetCtx = ctx
       const task = (args || '').trim()
-
       if (task.toLowerCase() === 'stop') {
         state.ralphActive = false
         notify(`🛑 Ralph stopped after ${state.ralphIteration} iterations`, 'warning')
@@ -430,19 +584,15 @@ export default function (pi: ExtensionAPI) {
         return
       }
       if (!task) { notify('Usage: /ralph <task> or /ralph stop', 'error'); return }
-
       state.ralphActive = true
       state.ralphIteration = 0
       notify(`🔄 Ralph starting: ${task}`, 'info')
       updateWidget()
-      pi.sendMessage(
-        { customType: 'pai-ralph', content: `[Ralph #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. Say "RALPH_DONE" when finished.`, display: true, details: undefined },
-        { triggerTurn: true },
-      )
+      pi.sendMessage({ customType: 'pai-ralph', content: `[Ralph #${++state.ralphIteration}]\n\nTask: ${task}\n\nExecute this task. Say "RALPH_DONE" when finished.`, display: true, details: undefined }, { triggerTurn: true })
     },
   })
 
-  pi.on('message_end', async (event, ctx) => {
+  pi.on('message_end', async (event) => {
     if (!state.ralphActive) return
     if (state.ralphIteration >= 50) { state.ralphActive = false; notify('🛑 Ralph: 50 limit', 'warning'); updateWidget(); return }
     const text = typeof event === 'object' && event !== null && 'text' in event ? String((event as Record<string, unknown>).text) : ''
@@ -456,20 +606,28 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'pai_status',
     label: 'PAI Status',
-    description: 'Get PAI status: mission, goals, challenges, learnings, loop, ratings.',
+    description: 'Get PAI status: mission, goals, challenges, learnings, loop, ratings, trends, personas.',
     parameters: Type.Object({}),
-    execute: async () => ({
-      details: undefined,
-      content: [{ type: 'text' as const, text: JSON.stringify({
-        mission: state.mission, goals: Array.from(state.goals.values()),
-        challenges: Array.from(state.challenges.values()),
-        learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category })),
-        innerLoop: state.innerLoop ? { phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal, isc: state.innerLoop.isc } : null,
-        iterations: state.iterationCount,
-        avgRating: state.ratings.length ? +(state.ratings.reduce((s, r) => s + r.score, 0) / state.ratings.length).toFixed(1) : null,
-        ratingCount: state.ratings.length,
-      }, null, 2) }],
-    }),
+    execute: async () => {
+      const { trend, avg, recent } = ratingTrend(state.ratings)
+      const patterns = detectRepeatingPatterns(state.learnings)
+      return {
+        details: undefined,
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          version: '4.0.0',
+          algorithm: 'OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY',
+          mission: state.mission,
+          goals: Array.from(state.goals.values()),
+          challenges: Array.from(state.challenges.values()),
+          learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category, sentiment: l.sentiment })),
+          innerLoop: state.innerLoop ? { phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal, isc: state.innerLoop.isc } : null,
+          iterations: state.iterationCount,
+          ratings: { avg, recent, trend: trend, count: state.ratings.length },
+          repeatingPatterns: patterns,
+          agentPersonas: Object.keys(AGENT_PERSONAS),
+        }, null, 2) }],
+      }
+    },
   })
 
   pi.registerTool({
@@ -482,31 +640,34 @@ export default function (pi: ExtensionAPI) {
       confidence: Type.Optional(Type.Number({ description: '0-1' })),
     }),
     execute: async (_callId, args) => {
-      state.learnings.push({ insight: args.insight, confidence: args.confidence ?? 0.8, category: args.category || 'domain', timestamp: new Date() })
-      persist(pi, 'pai-learning', { insight: args.insight, category: args.category || 'domain' })
+      const sentiment = inferSentiment(5, args.insight)
+      state.learnings.push({ insight: args.insight, confidence: args.confidence ?? 0.8, category: args.category || 'domain', timestamp: new Date(), sentiment })
+      persist(pi, 'pai-learning', { insight: args.insight, category: args.category || 'domain', sentiment })
       updateWidget()
-      return { details: undefined, content: [{ type: 'text' as const, text: `Learning [${args.category || 'domain'}]: ${args.insight}` }] }
+      return { details: undefined, content: [{ type: 'text' as const, text: `Learning [${args.category || 'domain'}] ${sentiment}: ${args.insight}` }] }
     },
   })
 
   pi.registerTool({
     name: 'pai_rate',
     label: 'PAI Rate',
-    description: 'Rate output quality 1-10. Low ratings auto-capture learnings.',
+    description: 'Rate output quality 1-10 with sentiment tracking. Low ratings auto-capture learnings.',
     parameters: Type.Object({
       score: Type.Number({ description: 'Rating 1-10' }),
       context: Type.Optional(Type.String({ description: 'Why' })),
     }),
     execute: async (_callId, args) => {
       const score = Math.max(1, Math.min(10, Math.round(args.score)))
-      state.ratings.push({ score, context: args.context || '', timestamp: new Date() })
-      persist(pi, 'pai-rating', { score, context: args.context })
+      const sentiment = inferSentiment(score, args.context || '')
+      state.ratings.push({ score, context: args.context || '', timestamp: new Date(), sentiment })
+      persist(pi, 'pai-rating', { score, context: args.context, sentiment })
       if (score <= 3) {
-        state.learnings.push({ insight: `Low rating (${score}): ${args.context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score })
-        persist(pi, 'pai-learning', { insight: `Low rating (${score})`, category: 'algorithm', fromRating: score })
+        state.learnings.push({ insight: `Low rating (${score}): ${args.context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score, sentiment: 'negative' })
+        persist(pi, 'pai-learning', { insight: `Low rating (${score})`, category: 'algorithm', fromRating: score, sentiment: 'negative' })
       }
       updateWidget()
-      return { details: undefined, content: [{ type: 'text' as const, text: `Rated ⭐${score}${args.context ? ': ' + args.context : ''}` }] }
+      const { trend, avg } = ratingTrend(state.ratings)
+      return { details: undefined, content: [{ type: 'text' as const, text: `Rated ⭐${score} ${sentiment} | Avg: ${avg} (${trend})${args.context ? ' — ' + args.context : ''}` }] }
     },
   })
 
@@ -517,7 +678,6 @@ export default function (pi: ExtensionAPI) {
 
     if (isToolCallEventType('bash', event)) {
       const cmd = event.input.command || ''
-
       for (const rule of rules.bashToolPatterns) {
         try {
           if (new RegExp(rule.pattern).test(cmd)) {
@@ -532,34 +692,21 @@ export default function (pi: ExtensionAPI) {
           }
         } catch { /* bad regex, skip */ }
       }
-
-      // NOTE: zeroAccessPaths are NOT checked against bash commands.
-      // Per Miessler's original PAI design, bash validation uses only regex patterns (above).
-      // Path-based access control (zeroAccess, readOnly, noDelete) applies to file operations only (below).
     }
 
     if (isToolCallEventType('read', event) || isToolCallEventType('write', event) || isToolCallEventType('edit', event)) {
       const filePath = event.input.path || ''
       const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(ctx.cwd, filePath)
-
       for (const zap of rules.zeroAccessPaths) {
-        if (isPathMatch(resolved, zap, ctx.cwd)) {
-          ctx.abort()
-          return { block: true, reason: `🛑 zero-access: ${zap}. DO NOT retry.` }
-        }
+        if (isPathMatch(resolved, zap, ctx.cwd)) { ctx.abort(); return { block: true, reason: `🛑 zero-access: ${zap}. DO NOT retry.` } }
       }
-
       if (isToolCallEventType('write', event) || isToolCallEventType('edit', event)) {
         for (const rop of rules.readOnlyPaths) {
-          if (isPathMatch(resolved, rop, ctx.cwd)) {
-            ctx.abort()
-            return { block: true, reason: `🛑 read-only: ${rop}. DO NOT modify.` }
-          }
+          if (isPathMatch(resolved, rop, ctx.cwd)) { ctx.abort(); return { block: true, reason: `🛑 read-only: ${rop}. DO NOT modify.` } }
         }
       }
     }
 
-    // noDeletePaths: block bash rm/del commands targeting protected paths
     if (isToolCallEventType('bash', event)) {
       const cmd = event.input.command || ''
       if (/\b(rm|del|rmdir|Remove-Item)\b/i.test(cmd)) {
@@ -582,8 +729,9 @@ export default function (pi: ExtensionAPI) {
   pi.on('session_start', async (_event, ctx) => {
     widgetCtx = ctx
     rules = loadDamageRules(ctx.cwd)
+    ensurePlansDir(ctx.cwd)
     updateWidget()
     const n = rules.bashToolPatterns.length + rules.zeroAccessPaths.length + rules.readOnlyPaths.length + rules.noDeletePaths.length
-    ctx.ui.notify(`🧠 π-PAI v3.1 | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
+    ctx.ui.notify(`🧠 π-PAI v4.0 (Miessler v4.0.3 sync) | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
   })
 }
