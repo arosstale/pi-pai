@@ -1,25 +1,31 @@
 /**
- * π-PAI v4.1 — Personal AI Infrastructure Extension for Pi
+ * π-PAI v4.2 — Personal AI Infrastructure Extension for Pi
  *
  * Synced with Miessler's PAI v4.0.3 algorithm:
  * - Algorithm: OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY (v4 loop)
- * - ISC decomposition methodology (atomic criteria, splitting test)
- * - 5 effort levels: Standard/Extended/Advanced/Deep/Comprehensive
+ * - ISC decomposition: splitting test, count gates, anti-criteria
+ * - 5 effort levels with ISC minimums: Standard(8)/Extended(16)/Advanced(24)/Deep(40)/Comprehensive(64)
+ * - Time budgets per effort level with auto-compress at 150%
+ * - Capability selection + invocation tracking
  * - Ratings + sentiment tracking with trend analysis
  * - Agent persona dispatch (architect, pentester, designer, etc.)
  * - Plans directory convention (.pi/plans/)
  * - Self-evolution trigger (learning pattern detection)
- * - Observability: writes events to PAI dashboard JSONL (localhost:5172)
+ * - Enhanced observability: PaiSplittingTest, PaiIscGate, PaiCapability, PaiEffortCompress events
  *
  * Also includes:
  * - Ralph Wiggum deterministic iteration engine
  * - Damage control (YAML-based path/command guards)
  * - Templates (trading, saas, devops, research, agent)
  *
- * v4.1: Observability bridge — writes events to ~/.claude/history/raw-outputs/
- *       for unified Pi + Claude Code dashboard at :5172.
- *       ISC decomposition methodology synced from v4.0.3 Algorithm doc.
- *       Effort levels updated to Standard/Extended/Advanced/Deep/Comprehensive.
+ * v4.2: Full v4.0.3 sync — 7 features:
+ *       1. ISC splitting test (atomicity validation)
+ *       2. ISC count gate (effort-level minimums)
+ *       3. Anti-criteria (/pai isca)
+ *       4. Capability selection (/pai capabilities)
+ *       5. Capability invocation tracking (tool_call counting)
+ *       6. Time budgets with auto-compress warning
+ *       7. Enhanced observability events for dashboard
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
@@ -60,16 +66,58 @@ type EffortLevel = 'standard' | 'extended' | 'advanced' | 'deep' | 'comprehensiv
 type GoalStatus = 'active' | 'blocked' | 'completed' | 'paused'
 type Sentiment = 'positive' | 'neutral' | 'negative'
 
+// ── v4.0.3: ISC Count Minimums & Min Capabilities (Feature #2, #4) ───────────
+const ISC_MINIMUMS: Record<EffortLevel, number> = {
+  standard: 8, extended: 16, advanced: 24, deep: 40, comprehensive: 64,
+}
+
+// ── v4.0.3: Time Budgets in minutes (Feature #6) ────────────────────────────
+const TIME_BUDGETS_MIN: Record<EffortLevel, number> = {
+  standard: 2, extended: 8, advanced: 16, deep: 32, comprehensive: 120,
+}
+const TIME_COMPRESS_FACTOR = 1.5 // auto-compress warning at 150% of budget
+
+// ── v4.0.3: ISC Splitting Test (Feature #1) ─────────────────────────────────
+// Returns warnings for non-atomic ISC criteria
+function splittingTest(criterion: string): string[] {
+  const warnings: string[] = []
+  // "And" / "With" test
+  if (/\b(and|with|including|plus)\b/i.test(criterion)) {
+    warnings.push(`Contains "${criterion.match(/\b(and|with|including|plus)\b/i)?.[0]}" — likely two criteria. Split them.`)
+  }
+  // Scope word test
+  if (/\b(all|every|complete|full|each)\b/i.test(criterion)) {
+    warnings.push(`Contains "${criterion.match(/\b(all|every|complete|full|each)\b/i)?.[0]}" — enumerate what this means specifically.`)
+  }
+  // Length test — atomic ISC should be 8-12 words
+  const words = criterion.trim().split(/\s+/).length
+  if (words > 15) warnings.push(`${words} words — too long for atomic ISC (target 8-12). Split or simplify.`)
+  if (words < 4) warnings.push(`${words} words — too vague. Be specific and testable.`)
+  // Domain boundary test
+  const domains = [/\bUI\b|display|render|visible|button|page/i, /\bAPI\b|endpoint|request|response|status/i, /\bdata|database|schema|field|column/i, /\blogic|flow|condition|branch|validate/i]
+  const crossedDomains = domains.filter(d => d.test(criterion))
+  if (crossedDomains.length > 1) warnings.push('Crosses multiple domains (UI/API/data/logic) — split per domain boundary.')
+  return warnings
+}
+
 interface Goal { id: string; title: string; status: GoalStatus; priority: string; isc?: string[] }
 interface Challenge { id: string; title: string; severity: string; affectedGoals: string[] }
 interface Learning { insight: string; confidence: number; category: string; timestamp: Date; fromRating?: number; sentiment?: Sentiment }
 interface Rating { score: number; context: string; timestamp: Date; sentiment: Sentiment }
+
+// v4.0.3: Anti-criteria (Feature #3)
+interface AntiCriterion { id: string; description: string; severity: 'critical' | 'high' | 'medium' }
+
+// v4.0.3: Capability tracking (Features #4, #5)
+interface Capability { name: string; type: 'tool' | 'skill'; minRequired?: number; invocations: number }
 
 interface InnerLoopState {
   phase: AlgorithmPhase
   goal: string
   effort: EffortLevel
   isc: string[]
+  iscA: AntiCriterion[] // v4.0.3: anti-criteria
+  capabilities: Map<string, Capability> // v4.0.3: selected capabilities
   data: Record<string, string>
   startTime: number
 }
@@ -198,6 +246,62 @@ function ratingTrend(ratings: Rating[], window: number = 5): { trend: 'improving
   return { trend: delta > 0.5 ? 'improving' : delta < -0.5 ? 'declining' : 'stable', avg: +avg.toFixed(1), recent: +recentAvg.toFixed(1) }
 }
 
+// ── v4.0.3: ISC Splitting Test (Feature #1) ─────────────────────────────────
+// Validates that each ISC is truly atomic — no compound criteria hiding behind
+// "and", "with", scope words, or domain boundary violations.
+
+const SPLIT_CONJUNCTIONS = /\b(and|as well as|along with|in addition to|plus|also|while|whilst)\b/i
+const SPLIT_SCOPE_WORDS = /\b(all|every|each|any|both|multiple|various|several)\b/i
+const SPLIT_DOMAIN_MARKERS = /\b(frontend and backend|client and server|ui and api|read and write|create and delete|input and output)\b/i
+
+interface SplitTestResult { pass: boolean; reason?: string; suggestion?: string }
+
+function iscSplittingTest(criterion: string): SplitTestResult {
+  // Check for conjunctions (compound criteria)
+  const conjMatch = criterion.match(SPLIT_CONJUNCTIONS)
+  if (conjMatch) {
+    const parts = criterion.split(SPLIT_CONJUNCTIONS).filter(p => p.trim() && !SPLIT_CONJUNCTIONS.test(p))
+    return {
+      pass: false,
+      reason: `Compound criterion — "${conjMatch[0]}" joins multiple conditions`,
+      suggestion: parts.length >= 2
+        ? `Split into:\n  1. ${parts[0].trim()}\n  2. ${parts[1].trim()}`
+        : `Remove "${conjMatch[0]}" and create separate ISCs for each condition`,
+    }
+  }
+
+  // Check for scope words (too broad)
+  const scopeMatch = criterion.match(SPLIT_SCOPE_WORDS)
+  if (scopeMatch) {
+    return {
+      pass: false,
+      reason: `Scope word "${scopeMatch[0]}" — criterion may cover multiple items`,
+      suggestion: `Be specific: which exact item(s)? Replace "${scopeMatch[0]}" with a concrete target`,
+    }
+  }
+
+  // Check for domain boundary violations
+  const domainMatch = criterion.match(SPLIT_DOMAIN_MARKERS)
+  if (domainMatch) {
+    return {
+      pass: false,
+      reason: `Cross-domain criterion — "${domainMatch[0]}" spans boundaries`,
+      suggestion: `Split into separate ISCs per domain`,
+    }
+  }
+
+  // Check word count (8-12 is ideal for ISC)
+  const words = criterion.trim().split(/\s+/).length
+  if (words > 20) {
+    return { pass: false, reason: `Too long (${words} words) — likely compound`, suggestion: 'Shorten to 8-12 words or split into multiple ISCs' }
+  }
+  if (words < 4) {
+    return { pass: false, reason: `Too short (${words} words) — likely not testable`, suggestion: 'Add specifics: what exactly should be verified?' }
+  }
+
+  return { pass: true }
+}
+
 // ── Self-Evolution Trigger (Steal #4) ────────────────────────────────────────
 
 function detectRepeatingPatterns(learnings: Learning[]): string[] {
@@ -285,7 +389,18 @@ export default function (pi: ExtensionAPI) {
           const idx = PHASES.indexOf(state.innerLoop.phase)
           const bar = PHASES.map((_, i) => i < idx ? theme.fg('success', '●') : i === idx ? theme.fg('accent', '◉') : theme.fg('dim', '○')).join(' ')
           const elapsed = Math.round((Date.now() - state.innerLoop.startTime) / 1000)
-          lines.push(theme.fg('dim', '  Loop: ') + bar + theme.fg('dim', ` [${state.innerLoop.phase}] ${state.innerLoop.effort} ${elapsed}s`))
+          const min = ISC_MINIMUMS[state.innerLoop.effort]
+          const iscProgress = `${state.innerLoop.isc.length}/${min}`
+          const budget = TIME_BUDGETS_MIN[state.innerLoop.effort]
+          const elapsedMin = Math.round(elapsed / 60)
+          const timeColor = elapsedMin > budget * TIME_COMPRESS_FACTOR ? 'error' : elapsedMin > budget ? 'warning' : 'dim'
+          lines.push(
+            theme.fg('dim', '  Loop: ') + bar +
+            theme.fg('dim', ` [${state.innerLoop.phase}] ${state.innerLoop.effort}`) +
+            theme.fg('dim', ' │ ISC:') + theme.fg(state.innerLoop.isc.length >= min ? 'success' : 'warning', iscProgress) +
+            (state.innerLoop.iscA.length ? theme.fg('dim', ' A:') + theme.fg('accent', `${state.innerLoop.iscA.length}`) : '') +
+            theme.fg('dim', ' │ ') + theme.fg(timeColor, `${elapsedMin}/${budget}min`)
+          )
         }
 
         if (state.ralphActive) lines.push(theme.fg('warning', `  🔄 Ralph #${state.ralphIteration}`) + theme.fg('dim', ' running...'))
@@ -366,7 +481,7 @@ export default function (pi: ExtensionAPI) {
 
     loop(rest) {
       const goal = rest || state.mission || 'unnamed'
-      state.innerLoop = { phase: 'OBSERVE', goal, effort: 'standard', isc: [], data: {}, startTime: Date.now() }
+      state.innerLoop = { phase: 'OBSERVE', goal, effort: 'standard', isc: [], iscA: [], capabilities: new Map(), data: {}, startTime: Date.now() }
       emitObserveEvent('PaiAlgorithmStart', { goal, phase: 'OBSERVE', effort: 'standard' })
       notify(`🔄 Algorithm started: ${goal} [OBSERVE]`, 'info')
       updateWidget()
@@ -384,10 +499,59 @@ export default function (pi: ExtensionAPI) {
     isc(rest) {
       if (!state.innerLoop) { notify('No active loop', 'error'); return }
       if (!rest) { notify('Usage: /pai isc <8-12 word testable criterion>', 'error'); return }
+
+      // v4.0.3 Feature #1: Splitting test
+      const test = iscSplittingTest(rest)
+      if (!test.pass) {
+        emitObserveEvent('PaiSplittingTest', { criterion: rest, pass: false, reason: test.reason })
+        notify(`❌ ISC failed splitting test: ${test.reason}`, 'warning')
+        if (test.suggestion) notify(`💡 ${test.suggestion}`, 'info')
+        return
+      }
+
       state.innerLoop.isc.push(rest)
       persist(pi, 'pai-isc', { criterion: rest, phase: state.innerLoop.phase })
-      notify(`📋 ISC-${state.innerLoop.isc.length}: ${rest}`, 'info')
+      emitObserveEvent('PaiSplittingTest', { criterion: rest, pass: true })
+      notify(`📋 ISC-${state.innerLoop.isc.length}/${ISC_MINIMUMS[state.innerLoop.effort]}: ${rest}`, 'info')
       updateWidget()
+    },
+
+    // v4.0.3 Feature #3: Anti-criteria
+    isca(rest) {
+      if (!state.innerLoop) { notify('No active loop', 'error'); return }
+      if (!rest) { notify('Usage: /pai isca <what must NOT happen>', 'error'); return }
+      const severity = /critical|security|data.?loss|crash/i.test(rest) ? 'critical' as const : /error|fail|break/i.test(rest) ? 'high' as const : 'medium' as const
+      const ac: AntiCriterion = { id: `a${state.innerLoop.iscA.length}`, description: rest, severity }
+      state.innerLoop.iscA.push(ac)
+      persist(pi, 'pai-isc-anti', { anti: rest, severity })
+      emitObserveEvent('PaiIscGate', { type: 'anti', criterion: rest, severity })
+      notify(`🚫 ISC-A${state.innerLoop.iscA.length} [${severity}]: ${rest}`, 'info')
+      updateWidget()
+    },
+
+    // v4.0.3 Feature #4: Capability selection
+    capabilities(rest) {
+      if (!state.innerLoop) { notify('No active loop', 'error'); return }
+      if (!rest) {
+        // List current capabilities
+        if (!state.innerLoop.capabilities.size) { notify('No capabilities selected. /pai capabilities add <tool|skill> <name> [min]', 'info'); return }
+        const caps = Array.from(state.innerLoop.capabilities.values())
+        const list = caps.map(c => `  ${c.type}:${c.name} — ${c.invocations}/${c.minRequired ?? '∞'} invocations`).join('\n')
+        pi.sendMessage({ customType: 'pai-capabilities', content: `# Selected Capabilities\n\n${list}`, display: true, details: undefined }, { triggerTurn: false })
+        return
+      }
+      const parts = rest.split(/\s+/)
+      if (parts[0] === 'add' && parts.length >= 3) {
+        const type = parts[1] as 'tool' | 'skill'
+        const name = parts[2]
+        const min = parts[3] ? parseInt(parts[3], 10) : undefined
+        if (type !== 'tool' && type !== 'skill') { notify('Type must be "tool" or "skill"', 'error'); return }
+        state.innerLoop.capabilities.set(name, { name, type, minRequired: min, invocations: 0 })
+        emitObserveEvent('PaiCapability', { action: 'add', name, type, minRequired: min })
+        notify(`🔧 Capability: ${type}:${name}${min ? ` (min ${min})` : ''}`, 'info')
+        return
+      }
+      notify('Usage: /pai capabilities add <tool|skill> <name> [min]', 'error')
     },
 
     next(rest) {
@@ -395,19 +559,71 @@ export default function (pi: ExtensionAPI) {
       if (rest) state.innerLoop.data[state.innerLoop.phase] = rest
       const idx = PHASES.indexOf(state.innerLoop.phase)
 
+      // v4.0.3 Feature #2: ISC count gate before EXECUTE phase
+      if (state.innerLoop.phase === 'DECIDE') {
+        const min = ISC_MINIMUMS[state.innerLoop.effort]
+        const count = state.innerLoop.isc.length
+        if (count < min) {
+          emitObserveEvent('PaiIscGate', { type: 'count', count, minimum: min, effort: state.innerLoop.effort, pass: false })
+          notify(`❌ ISC gate: ${count}/${min} criteria (${state.innerLoop.effort} requires ${min}). Add more with /pai isc`, 'error')
+          return
+        }
+        emitObserveEvent('PaiIscGate', { type: 'count', count, minimum: min, effort: state.innerLoop.effort, pass: true })
+      }
+
+      // v4.0.3 Feature #5: Capability invocation check before VERIFY
+      if (state.innerLoop.phase === 'EXECUTE' && state.innerLoop.capabilities.size > 0) {
+        const unmet: string[] = []
+        const capEntries = Array.from(state.innerLoop.capabilities.entries())
+        for (let ci = 0; ci < capEntries.length; ci++) {
+          const [name, cap] = capEntries[ci]
+          if (cap.minRequired && cap.invocations < cap.minRequired) {
+            unmet.push(`${cap.type}:${name} (${cap.invocations}/${cap.minRequired})`)
+          }
+        }
+        if (unmet.length) {
+          notify(`⚠️ Unmet capabilities: ${unmet.join(', ')}`, 'warning')
+        }
+      }
+
       if (idx < PHASES.length - 1) {
         state.innerLoop.phase = PHASES[idx + 1]
         emitObserveEvent('PaiPhaseTransition', { phase: state.innerLoop.phase, goal: state.innerLoop.goal, effort: state.innerLoop.effort })
         notify(`→ ${state.innerLoop.phase}`, 'info')
+
+        // v4.0.3 Feature #6: Time budget check
+        const elapsedMin = (Date.now() - state.innerLoop.startTime) / 60000
+        const budget = TIME_BUDGETS_MIN[state.innerLoop.effort]
+        if (elapsedMin > budget * TIME_COMPRESS_FACTOR) {
+          emitObserveEvent('PaiEffortCompress', { elapsed: +elapsedMin.toFixed(1), budget, effort: state.innerLoop.effort })
+          notify(`⏰ Over time budget (${Math.round(elapsedMin)}min / ${budget}min) — compressing scope`, 'warning')
+        } else if (elapsedMin > budget) {
+          notify(`⏰ At time budget (${Math.round(elapsedMin)}min / ${budget}min)`, 'info')
+        }
       } else {
         state.iterationCount++
         const elapsed = Math.round((Date.now() - state.innerLoop.startTime) / 1000)
+
+        // v4.0.3 Feature #5: Final capability report
+        const capReport = state.innerLoop.capabilities.size > 0
+          ? Array.from(state.innerLoop.capabilities.values()).map(c => `${c.type}:${c.name}=${c.invocations}`).join(', ')
+          : 'none'
+
         persist(pi, 'pai-loop-complete', {
           goal: state.innerLoop.goal, iteration: state.iterationCount,
-          effort: state.innerLoop.effort, isc: state.innerLoop.isc, data: state.innerLoop.data, elapsed,
+          effort: state.innerLoop.effort, isc: state.innerLoop.isc,
+          iscA: state.innerLoop.iscA.map(a => a.description),
+          capabilities: capReport,
+          data: state.innerLoop.data, elapsed,
         })
-        emitObserveEvent('PaiLoopComplete', { goal: state.innerLoop.goal, iteration: state.iterationCount, effort: state.innerLoop.effort, elapsed, isc_count: state.innerLoop.isc.length })
-        notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'info')
+        emitObserveEvent('PaiLoopComplete', {
+          goal: state.innerLoop.goal, iteration: state.iterationCount,
+          effort: state.innerLoop.effort, elapsed,
+          isc_count: state.innerLoop.isc.length,
+          isc_anti_count: state.innerLoop.iscA.length,
+          capabilities: capReport,
+        })
+        notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s) | ${state.innerLoop.isc.length} ISC, ${state.innerLoop.iscA.length} anti`, 'info')
         state.innerLoop = null
       }
       updateWidget()
@@ -521,7 +737,7 @@ export default function (pi: ExtensionAPI) {
       const patterns = detectRepeatingPatterns(state.learnings)
       const plans = listPlans(ctx.cwd)
 
-      let r = `# PAI Status (v4.1 — synced with Miessler v4.0.3 + observability bridge)\n\n`
+      let r = `# PAI Status (v4.2 — full v4.0.3 sync: splitting test, count gate, anti-criteria, capabilities, time budgets)\n\n`
       r += `**Mission:** ${state.mission || 'Not set'}\n`
       r += `**Iterations:** ${state.iterationCount} | **Rating:** ⭐${avg} ${trendIcon}${recent} (${state.ratings.length} signals)\n`
       if (patterns.length) r += `**⚠️ Repeating patterns:** ${patterns.length} — run /pai evolve\n`
@@ -543,10 +759,26 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (state.innerLoop) {
-        r += `\n## Active Loop (v4 Algorithm)\n`
+        const min = ISC_MINIMUMS[state.innerLoop.effort]
+        const budget = TIME_BUDGETS_MIN[state.innerLoop.effort]
+        const elapsedMin = Math.round((Date.now() - state.innerLoop.startTime) / 60000)
+        r += `\n## Active Loop (v4.0.3 Algorithm)\n`
         r += `**Phase:** ${state.innerLoop.phase} | **Effort:** ${state.innerLoop.effort} | **Goal:** ${state.innerLoop.goal}\n`
+        r += `**ISC:** ${state.innerLoop.isc.length}/${min} | **Anti:** ${state.innerLoop.iscA.length} | **Time:** ${elapsedMin}/${budget}min\n`
         r += `**Phases:** OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY\n`
-        for (const [i, c] of state.innerLoop.isc.entries()) r += `- ISC-${i + 1}: ${c}\n`
+        for (let ii = 0; ii < state.innerLoop.isc.length; ii++) r += `- ISC-${ii + 1}: ${state.innerLoop.isc[ii]}\n`
+        if (state.innerLoop.iscA.length) {
+          r += `\n**Anti-Criteria (must NOT happen):**\n`
+          for (const ac of state.innerLoop.iscA) r += `- 🚫 [${ac.severity}] ${ac.description}\n`
+        }
+        if (state.innerLoop.capabilities.size) {
+          r += `\n**Capabilities:**\n`
+          const statusCaps = Array.from(state.innerLoop.capabilities.values())
+          for (let ci = 0; ci < statusCaps.length; ci++) {
+            const cap = statusCaps[ci]
+            r += `- 🔧 ${cap.type}:${cap.name} — ${cap.invocations}/${cap.minRequired ?? '∞'}\n`
+          }
+        }
       }
 
       r += `\n## Agent Personas\n${Object.entries(AGENT_PERSONAS).map(([k, v]) => `- **${k}**: ${v.role}`).join('\n')}\n`
@@ -562,7 +794,7 @@ export default function (pi: ExtensionAPI) {
   // ── /pai command ───────────────────────────────────────────────────────
 
   pi.registerCommand('pai', {
-    description: 'PAI v4.1: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|agent|plans|trend|evolve|sessions|replay|reset|status',
+    description: 'PAI v4.2: /pai mission|goal|done|block|challenge|learn|loop|next|isc|isca|effort|capabilities|template|agent|plans|trend|evolve|sessions|replay|reset|status',
     handler: async (args, ctx) => {
       widgetCtx = ctx
       ensurePlansDir(ctx.cwd)
@@ -649,15 +881,24 @@ export default function (pi: ExtensionAPI) {
       return {
         details: undefined,
         content: [{ type: 'text' as const, text: JSON.stringify({
-          version: '4.1.0',
+          version: '4.2.0',
           algorithm: 'OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY',
-          effortLevels: 'Standard|Extended|Advanced|Deep|Comprehensive',
-          iscMethodology: 'atomic criteria, splitting test, domain decomposition',
+          effortLevels: 'Standard(8)|Extended(16)|Advanced(24)|Deep(40)|Comprehensive(64)',
+          iscMethodology: 'splitting test + count gate + anti-criteria + capability tracking',
+          timeBudgets: TIME_BUDGETS_MIN,
           mission: state.mission,
           goals: Array.from(state.goals.values()),
           challenges: Array.from(state.challenges.values()),
           learnings: state.learnings.slice(-10).map(l => ({ insight: l.insight, category: l.category, sentiment: l.sentiment })),
-          innerLoop: state.innerLoop ? { phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal, isc: state.innerLoop.isc } : null,
+          innerLoop: state.innerLoop ? {
+            phase: state.innerLoop.phase, effort: state.innerLoop.effort, goal: state.innerLoop.goal,
+            isc: state.innerLoop.isc,
+            iscMinimum: ISC_MINIMUMS[state.innerLoop.effort],
+            iscAnti: state.innerLoop.iscA.map(a => ({ severity: a.severity, description: a.description })),
+            capabilities: Array.from(state.innerLoop.capabilities.values()).map(c => ({ name: c.name, type: c.type, invocations: c.invocations, minRequired: c.minRequired })),
+            elapsedMin: +((Date.now() - state.innerLoop.startTime) / 60000).toFixed(1),
+            timeBudgetMin: TIME_BUDGETS_MIN[state.innerLoop.effort],
+          } : null,
           iterations: state.iterationCount,
           ratings: { avg, recent, trend: trend, count: state.ratings.length },
           repeatingPatterns: patterns,
@@ -716,6 +957,15 @@ export default function (pi: ExtensionAPI) {
     // Emit tool call to observability dashboard
     const toolName = (event as any)?.name || (event as any)?.tool || 'unknown'
     emitObserveEvent('PostToolUse', { tool_name: toolName, source: 'pi-pai' })
+
+    // v4.0.3 Feature #5: Track capability invocations
+    if (state.innerLoop?.capabilities.size) {
+      const cap = state.innerLoop.capabilities.get(toolName)
+      if (cap) {
+        cap.invocations++
+        emitObserveEvent('PaiCapability', { action: 'invoke', name: toolName, count: cap.invocations })
+      }
+    }
 
     if (isToolCallEventType('bash', event)) {
       const cmd = event.input.command || ''
@@ -795,9 +1045,11 @@ export default function (pi: ExtensionAPI) {
 
     let r = `# Pi Sessions (${sessions.length})\n\n`
     r += `| # | Project | File | Events | Last Modified |\n|---|---------|------|--------|---------------|\n`
-    for (const [i, s] of sessions.slice(0, 15).entries()) {
+    const displaySessions = sessions.slice(0, 15)
+    for (let si = 0; si < displaySessions.length; si++) {
+      const s = displaySessions[si]
       const proj = s.dir.replace(/^--/, '').replace(/--$/, '').replace(/-/g, '/').slice(0, 40)
-      r += `| ${i + 1} | ${proj} | ${s.file.slice(0, 30)} | ${s.lines} | ${s.time.toLocaleString()} |\n`
+      r += `| ${si + 1} | ${proj} | ${s.file.slice(0, 30)} | ${s.lines} | ${s.time.toLocaleString()} |\n`
     }
     r += `\n**Replay to dashboard:** \`/pai replay <session-number>\`\n`
     r += `**Session dir:** ~/.pi/agent/sessions/\n`
@@ -879,6 +1131,6 @@ export default function (pi: ExtensionAPI) {
     emitObserveEvent('SessionStart', { cwd: ctx.cwd, source: 'pi-pai', version: '4.1.0' })
     updateWidget()
     const n = rules.bashToolPatterns.length + rules.zeroAccessPaths.length + rules.readOnlyPaths.length + rules.noDeletePaths.length
-    ctx.ui.notify(`🧠 π-PAI v4.1 (Miessler v4.0.3 sync) | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
+    ctx.ui.notify(`🧠 π-PAI v4.2 (v4.0.3 full sync) | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
   })
 }
