@@ -562,7 +562,7 @@ export default function (pi: ExtensionAPI) {
   // ── /pai command ───────────────────────────────────────────────────────
 
   pi.registerCommand('pai', {
-    description: 'PAI v4: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|agent|plans|trend|evolve|reset|status',
+    description: 'PAI v4.1: /pai mission|goal|done|block|challenge|learn|loop|next|isc|effort|template|agent|plans|trend|evolve|sessions|replay|reset|status',
     handler: async (args, ctx) => {
       widgetCtx = ctx
       ensurePlansDir(ctx.cwd)
@@ -766,6 +766,110 @@ export default function (pi: ExtensionAPI) {
   })
 
   // ── Session lifecycle ──────────────────────────────────────────────────
+
+  // ── /pai sessions — list and replay pi sessions into the dashboard ───
+
+  paiCommands['sessions'] = function(_rest, ctx) {
+    const sessDir = path.join(os.homedir(), '.pi', 'agent', 'sessions')
+    if (!fs.existsSync(sessDir)) { notify('No sessions found', 'info'); return }
+
+    // Find session dirs and get latest file from each
+    const dirs = fs.readdirSync(sessDir).filter(d => {
+      try { return fs.statSync(path.join(sessDir, d)).isDirectory() } catch { return false }
+    })
+
+    const sessions: { dir: string; file: string; time: Date; lines: number }[] = []
+    for (const dir of dirs) {
+      const files = fs.readdirSync(path.join(sessDir, dir)).filter(f => f.endsWith('.jsonl')).sort().reverse()
+      if (files.length) {
+        const filePath = path.join(sessDir, dir, files[0])
+        try {
+          const stat = fs.statSync(filePath)
+          const lines = fs.readFileSync(filePath, 'utf8').trim().split('\n').length
+          sessions.push({ dir, file: files[0], time: stat.mtime, lines })
+        } catch { /* skip */ }
+      }
+    }
+
+    sessions.sort((a, b) => b.time.getTime() - a.time.getTime())
+
+    let r = `# Pi Sessions (${sessions.length})\n\n`
+    r += `| # | Project | File | Events | Last Modified |\n|---|---------|------|--------|---------------|\n`
+    for (const [i, s] of sessions.slice(0, 15).entries()) {
+      const proj = s.dir.replace(/^--/, '').replace(/--$/, '').replace(/-/g, '/').slice(0, 40)
+      r += `| ${i + 1} | ${proj} | ${s.file.slice(0, 30)} | ${s.lines} | ${s.time.toLocaleString()} |\n`
+    }
+    r += `\n**Replay to dashboard:** \`/pai replay <session-number>\`\n`
+    r += `**Session dir:** ~/.pi/agent/sessions/\n`
+
+    pi.sendMessage({ customType: 'pai-sessions', content: r, display: true, details: undefined }, { triggerTurn: false })
+  }
+
+  paiCommands['replay'] = function(rest) {
+    const sessDir = path.join(os.homedir(), '.pi', 'agent', 'sessions')
+    if (!fs.existsSync(sessDir)) { notify('No sessions found', 'error'); return }
+
+    // Find all sessions sorted by time
+    const dirs = fs.readdirSync(sessDir).filter(d => {
+      try { return fs.statSync(path.join(sessDir, d)).isDirectory() } catch { return false }
+    })
+    const sessions: string[] = []
+    for (const dir of dirs) {
+      const files = fs.readdirSync(path.join(sessDir, dir)).filter(f => f.endsWith('.jsonl')).sort().reverse()
+      if (files.length) sessions.push(path.join(sessDir, dir, files[0]))
+    }
+    sessions.sort((a, b) => {
+      try { return fs.statSync(b).mtime.getTime() - fs.statSync(a).mtime.getTime() } catch { return 0 }
+    })
+
+    const idx = parseInt(rest.trim()) - 1
+    if (isNaN(idx) || idx < 0 || idx >= sessions.length) { notify(`Usage: /pai replay <1-${sessions.length}>`, 'error'); return }
+
+    const sessionFile = sessions[idx]
+    let replayed = 0
+
+    try {
+      const lines = fs.readFileSync(sessionFile, 'utf8').trim().split('\n')
+      for (const line of lines) {
+        try {
+          const ev = JSON.parse(line)
+          // Map pi session events to observability format
+          if (ev.type === 'session') {
+            emitObserveEvent('SessionStart', { cwd: ev.cwd, source: 'pi-session-replay', session_id: ev.id })
+            replayed++
+          } else if (ev.type === 'message' && ev.message?.content) {
+            for (const c of ev.message.content) {
+              if (c.type === 'toolCall') {
+                emitObserveEvent('PostToolUse', {
+                  tool_name: c.name,
+                  tool_input: c.arguments,
+                  source: 'pi-session-replay',
+                  session_id: ev.id,
+                })
+                replayed++
+              }
+            }
+            // Emit token usage
+            if (ev.message?.usage) {
+              emitObserveEvent('PaiTokenUsage', {
+                input: ev.message.usage.input,
+                output: ev.message.usage.output,
+                cost: ev.message.usage.cost,
+                model: ev.message.model,
+                source: 'pi-session-replay',
+              })
+              replayed++
+            }
+          } else if (ev.type === 'compaction') {
+            emitObserveEvent('PaiCompaction', { source: 'pi-session-replay' })
+            replayed++
+          }
+        } catch { /* skip bad lines */ }
+      }
+    } catch (e: any) { notify(`Failed to read session: ${e.message}`, 'error'); return }
+
+    notify(`📊 Replayed ${replayed} events from ${path.basename(sessionFile)} → dashboard`, 'info')
+  }
 
   pi.on('session_start', async (_event, ctx) => {
     widgetCtx = ctx
