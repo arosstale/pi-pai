@@ -1,6 +1,6 @@
 {
   "name": "pi-pai",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Personal AI Infrastructure extension for Pi — synced with Miessler PAI v4.0.3: OBSERVE→PLAN→DECIDE→EXECUTE→VERIFY, agent personas, sentiment tracking, self-evolution triggers, plans convention, Ralph iteration, damage control",
   "type": "module",
   "main": "src/extension.ts",

@@ -1,21 +1,25 @@
 /**
- * π-PAI v4.0 — Personal AI Infrastructure Extension for Pi
+ * π-PAI v4.1 — Personal AI Infrastructure Extension for Pi
  *
  * Synced with Miessler's PAI v4.0.3 algorithm:
  * - Algorithm: OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY (v4 loop)
- * - ISC decomposition (Ideal Success Criteria)
+ * - ISC decomposition methodology (atomic criteria, splitting test)
+ * - 5 effort levels: Standard/Extended/Advanced/Deep/Comprehensive
  * - Ratings + sentiment tracking with trend analysis
  * - Agent persona dispatch (architect, pentester, designer, etc.)
  * - Plans directory convention (.pi/plans/)
  * - Self-evolution trigger (learning pattern detection)
+ * - Observability: writes events to PAI dashboard JSONL (localhost:5172)
  *
  * Also includes:
  * - Ralph Wiggum deterministic iteration engine
  * - Damage control (YAML-based path/command guards)
  * - Templates (trading, saas, devops, research, agent)
  *
- * v4.0: Steal-list from Miessler's PAI — ratings/sentiment, agent personas,
- * plans convention, self-evolution trigger, algorithm sync to v4.0.3.
+ * v4.1: Observability bridge — writes events to ~/.claude/history/raw-outputs/
+ *       for unified Pi + Claude Code dashboard at :5172.
+ *       ISC decomposition methodology synced from v4.0.3 Algorithm doc.
+ *       Effort levels updated to Standard/Extended/Advanced/Deep/Comprehensive.
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent'
@@ -25,10 +29,34 @@ import * as path from 'path'
 import * as os from 'os'
 import YAML from 'js-yaml'
 
+// ── Observability Bridge ─────────────────────────────────────────────────────
+// Writes events to ~/.claude/history/raw-outputs/ in the same format as
+// Claude Code's universal_hook_logger.py — so the PAI dashboard at :5172
+// shows Pi sessions alongside Claude Code sessions.
+
+let observeSessionId = `pi-pai-${Date.now().toString(36)}`
+
+function emitObserveEvent(hookType: string, payload: Record<string, unknown>) {
+  try {
+    const now = new Date()
+    const dir = path.join(os.homedir(), '.claude', 'history', 'raw-outputs', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_all-events.jsonl`)
+    const entry = {
+      source_app: 'pi-pai',
+      session_id: observeSessionId,
+      hook_event_type: hookType,
+      payload: { session_id: observeSessionId, hook_event_name: hookType, ...payload },
+      timestamp: Date.now(),
+    }
+    fs.appendFileSync(file, JSON.stringify(entry) + '\n')
+  } catch { /* non-blocking */ }
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type AlgorithmPhase = 'OBSERVE' | 'PLAN' | 'DECIDE' | 'EXECUTE' | 'VERIFY'
-type EffortLevel = 'instant' | 'fast' | 'standard' | 'extended' | 'deep'
+type EffortLevel = 'standard' | 'extended' | 'advanced' | 'deep' | 'comprehensive'
 type GoalStatus = 'active' | 'blocked' | 'completed' | 'paused'
 type Sentiment = 'positive' | 'neutral' | 'negative'
 
@@ -214,7 +242,7 @@ export default function (pi: ExtensionAPI) {
   let widgetCtx: ExtensionContext | null = null
   // v4.0.3 algorithm: OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY
   const PHASES: AlgorithmPhase[] = ['OBSERVE', 'PLAN', 'DECIDE', 'EXECUTE', 'VERIFY']
-  const EFFORTS: EffortLevel[] = ['instant', 'fast', 'standard', 'extended', 'deep']
+  const EFFORTS: EffortLevel[] = ['standard', 'extended', 'advanced', 'deep', 'comprehensive']
 
   function notify(msg: string, type: 'error' | 'warning' | 'info' = 'info') {
     widgetCtx?.ui.notify(msg, type)
@@ -279,6 +307,7 @@ export default function (pi: ExtensionAPI) {
       if (!rest) { notify('Usage: /pai mission <statement>', 'error'); return }
       state.mission = rest
       persist(pi, 'pai-mission', { mission: rest })
+      emitObserveEvent('PaiMission', { mission: rest })
       notify(`🎯 Mission: ${rest}`, 'info')
       updateWidget()
     },
@@ -288,6 +317,7 @@ export default function (pi: ExtensionAPI) {
       const id = `g${state.goals.size}`
       state.goals.set(id, { id, title: rest, status: 'active', priority: 'p1', isc: [] })
       persist(pi, 'pai-goal', { id, title: rest, status: 'active' })
+      emitObserveEvent('PaiGoal', { goal_id: id, title: rest, status: 'active' })
       notify(`✅ Goal ${id}: ${rest}`, 'info')
       updateWidget()
     },
@@ -324,6 +354,7 @@ export default function (pi: ExtensionAPI) {
       const sentiment = inferSentiment(5, rest)
       state.learnings.push({ insight: rest, confidence: 0.8, category: 'domain', timestamp: new Date(), sentiment })
       persist(pi, 'pai-learning', { insight: rest, category: 'domain', sentiment })
+      emitObserveEvent('PaiLearning', { insight: rest, category: 'domain', sentiment })
       notify(`📚 Learning: ${rest}`, 'info')
 
       // Self-evolution trigger: check for repeating patterns
@@ -336,6 +367,7 @@ export default function (pi: ExtensionAPI) {
     loop(rest) {
       const goal = rest || state.mission || 'unnamed'
       state.innerLoop = { phase: 'OBSERVE', goal, effort: 'standard', isc: [], data: {}, startTime: Date.now() }
+      emitObserveEvent('PaiAlgorithmStart', { goal, phase: 'OBSERVE', effort: 'standard' })
       notify(`🔄 Algorithm started: ${goal} [OBSERVE]`, 'info')
       updateWidget()
     },
@@ -365,6 +397,7 @@ export default function (pi: ExtensionAPI) {
 
       if (idx < PHASES.length - 1) {
         state.innerLoop.phase = PHASES[idx + 1]
+        emitObserveEvent('PaiPhaseTransition', { phase: state.innerLoop.phase, goal: state.innerLoop.goal, effort: state.innerLoop.effort })
         notify(`→ ${state.innerLoop.phase}`, 'info')
       } else {
         state.iterationCount++
@@ -373,6 +406,7 @@ export default function (pi: ExtensionAPI) {
           goal: state.innerLoop.goal, iteration: state.iterationCount,
           effort: state.innerLoop.effort, isc: state.innerLoop.isc, data: state.innerLoop.data, elapsed,
         })
+        emitObserveEvent('PaiLoopComplete', { goal: state.innerLoop.goal, iteration: state.iterationCount, effort: state.innerLoop.effort, elapsed, isc_count: state.innerLoop.isc.length })
         notify(`✅ Loop #${state.iterationCount} complete (${elapsed}s)`, 'info')
         state.innerLoop = null
       }
@@ -487,7 +521,7 @@ export default function (pi: ExtensionAPI) {
       const patterns = detectRepeatingPatterns(state.learnings)
       const plans = listPlans(ctx.cwd)
 
-      let r = `# PAI Status (v4.0 — synced with Miessler v4.0.3)\n\n`
+      let r = `# PAI Status (v4.1 — synced with Miessler v4.0.3 + observability bridge)\n\n`
       r += `**Mission:** ${state.mission || 'Not set'}\n`
       r += `**Iterations:** ${state.iterationCount} | **Rating:** ⭐${avg} ${trendIcon}${recent} (${state.ratings.length} signals)\n`
       if (patterns.length) r += `**⚠️ Repeating patterns:** ${patterns.length} — run /pai evolve\n`
@@ -556,6 +590,7 @@ export default function (pi: ExtensionAPI) {
       const sentiment = inferSentiment(score, context)
       state.ratings.push({ score, context, timestamp: new Date(), sentiment })
       persist(pi, 'pai-rating', { score, context, sentiment })
+      emitObserveEvent('PaiRating', { score, context, sentiment })
 
       if (score <= 3) {
         const l: Learning = { insight: `Low rating (${score}): ${context || 'below expectations'}`, confidence: 0.9, category: 'algorithm', timestamp: new Date(), fromRating: score, sentiment: 'negative' }
@@ -614,8 +649,10 @@ export default function (pi: ExtensionAPI) {
       return {
         details: undefined,
         content: [{ type: 'text' as const, text: JSON.stringify({
-          version: '4.0.0',
+          version: '4.1.0',
           algorithm: 'OBSERVE → PLAN → DECIDE → EXECUTE → VERIFY',
+          effortLevels: 'Standard|Extended|Advanced|Deep|Comprehensive',
+          iscMethodology: 'atomic criteria, splitting test, domain decomposition',
           mission: state.mission,
           goals: Array.from(state.goals.values()),
           challenges: Array.from(state.challenges.values()),
@@ -676,6 +713,10 @@ export default function (pi: ExtensionAPI) {
   pi.on('tool_call', async (event, ctx) => {
     const { isToolCallEventType } = await import('@mariozechner/pi-coding-agent')
 
+    // Emit tool call to observability dashboard
+    const toolName = (event as any)?.name || (event as any)?.tool || 'unknown'
+    emitObserveEvent('PostToolUse', { tool_name: toolName, source: 'pi-pai' })
+
     if (isToolCallEventType('bash', event)) {
       const cmd = event.input.command || ''
       for (const rule of rules.bashToolPatterns) {
@@ -730,8 +771,10 @@ export default function (pi: ExtensionAPI) {
     widgetCtx = ctx
     rules = loadDamageRules(ctx.cwd)
     ensurePlansDir(ctx.cwd)
+    observeSessionId = `pi-pai-${Date.now().toString(36)}`
+    emitObserveEvent('SessionStart', { cwd: ctx.cwd, source: 'pi-pai', version: '4.1.0' })
     updateWidget()
     const n = rules.bashToolPatterns.length + rules.zeroAccessPaths.length + rules.readOnlyPaths.length + rules.noDeletePaths.length
-    ctx.ui.notify(`🧠 π-PAI v4.0 (Miessler v4.0.3 sync) | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
+    ctx.ui.notify(`🧠 π-PAI v4.1 (Miessler v4.0.3 sync) | ${n ? n + ' rules' : 'no rules'} | /pai /ralph /rate`, 'info')
   })
 }
